@@ -12,6 +12,11 @@ export interface LanguageDetection {
   fileCount: number;
   color?: string;
 }
+export interface DependencyEdge {
+  source: string;
+  target: string;
+  type: 'import' | 'require' | 'static';
+}
 export interface RepositoryMetadata {
   name: string;
   totalFiles: number;
@@ -19,6 +24,8 @@ export interface RepositoryMetadata {
   primaryLanguage: string;
   languages: LanguageDetection[];
   structure: FileEntry[];
+  dependencies: DependencyEdge[];
+  documentation?: Record<string, string>;
   analyzedAt: number;
 }
 export interface ScanResult {

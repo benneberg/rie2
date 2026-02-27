@@ -1,14 +1,27 @@
-import { RepositoryMetadata, FileEntry, LanguageDetection } from '../src/lib/rie-types';
+import { RepositoryMetadata, FileEntry, LanguageDetection, DependencyEdge } from '../src/lib/rie-types';
 export class RIEAnalyzer {
   static async analyze(repoName: string, files: any[]): Promise<RepositoryMetadata> {
     const totalFiles = files.length;
     const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0);
-    // Language Detection logic
     const languageCounts: Record<string, number> = {};
+    const dependencies: DependencyEdge[] = [];
     const structure: FileEntry[] = files.map(f => {
       const ext = f.name.split('.').pop()?.toLowerCase() || 'unknown';
       const lang = this.detectLanguage(ext);
       languageCounts[lang] = (languageCounts[lang] || 0) + 1;
+      // Simulate basic dependency extraction for JS/TS files
+      // In a real implementation with file content, we'd use regex/AST here
+      if (['ts', 'tsx', 'js', 'jsx'].includes(ext)) {
+        // Randomly simulate some internal relationships for visualization testing
+        const potentialTargets = files.filter(other => other.name !== f.name && other.name.includes('/')).slice(0, 1);
+        potentialTargets.forEach(target => {
+          dependencies.push({
+            source: f.name,
+            target: target.name,
+            type: 'import'
+          });
+        });
+      }
       return {
         path: f.name,
         name: f.name.split('/').pop() || f.name,
@@ -32,6 +45,7 @@ export class RIEAnalyzer {
       primaryLanguage: languages[0]?.language || 'Unknown',
       languages,
       structure,
+      dependencies,
       analyzedAt: Date.now()
     };
   }

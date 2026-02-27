@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/rie/StatsCard';
-import { FileTree } from '@/components/rie/FileTree';
+import { DependencyGraph } from '@/components/rie/DependencyGraph';
 import { RepositoryMetadata } from '@/lib/rie-types';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Files, Code2, Database, Activity } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Files, Code2, Database, Activity, Sparkles, PieChart as PieIcon } from 'lucide-react';
 import { chatService } from '@/lib/chat';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 export function DashboardPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const sessionId = searchParams.get('session');
   const [metadata, setMetadata] = useState<RepositoryMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,13 +20,19 @@ export function DashboardPage() {
     if (sessionId) {
       chatService.switchSession(sessionId);
       fetchMetadata();
+    } else {
+      navigate('/');
     }
   }, [sessionId]);
   const fetchMetadata = async () => {
     try {
       const response = await chatService.getMessages();
-      if (response.success && response.data?.metadata) {
-        setMetadata(response.data.metadata as any);
+      if (response.success && response.data) {
+        // Correct casting to handle the metadata existence in ChatState
+        const stateData = response.data as any;
+        if (stateData.metadata) {
+          setMetadata(stateData.metadata);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch metadata:', error);
@@ -54,65 +63,83 @@ export function DashboardPage() {
       </AppLayout>
     );
   }
+  const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
   return (
     <AppLayout container>
       <div className="space-y-8 animate-fade-in">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">{metadata.name}</h1>
-          <p className="text-muted-foreground">Repository Insights Dashboard</p>
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-6">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight">{metadata.name}</h1>
+            <p className="text-muted-foreground">Repository Insights Dashboard</p>
+          </div>
+          <Button 
+            onClick={() => navigate(`/studio?session=${sessionId}`)}
+            className="bg-gradient-primary shadow-glow hover:scale-105 transition-all"
+          >
+            <Sparkles className="w-4 h-4 mr-2" /> Documentation Studio
+          </Button>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatsCard 
-            label="Total Files" 
-            value={metadata.totalFiles.toString()} 
-            icon={<Files className="w-4 h-4" />} 
-          />
-          <StatsCard 
-            label="Main Language" 
-            value={metadata.primaryLanguage} 
-            icon={<Code2 className="w-4 h-4" />} 
-          />
-          <StatsCard 
-            label="Project Size" 
-            value={`${(metadata.totalSize / 1024).toFixed(1)} KB`} 
-            icon={<Database className="w-4 h-4" />} 
-          />
-          <StatsCard 
-            label="Languages" 
-            value={metadata.languages.length.toString()} 
-            icon={<Activity className="w-4 h-4" />} 
-          />
+          <StatsCard label="Total Files" value={metadata.totalFiles.toString()} icon={<Files className="w-4 h-4" />} />
+          <StatsCard label="Main Language" value={metadata.primaryLanguage} icon={<Code2 className="w-4 h-4" />} />
+          <StatsCard label="Project Size" value={`${(metadata.totalSize / 1024).toFixed(1)} KB`} icon={<Database className="w-4 h-4" />} />
+          <StatsCard label="Dependencies" value={metadata.dependencies.length.toString()} icon={<Activity className="w-4 h-4" />} />
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-2 overflow-hidden bg-card/50 backdrop-blur-sm border-border">
-            <CardHeader>
-              <CardTitle>Architecture Map</CardTitle>
+          <Card className="lg:col-span-2 bg-card/50 backdrop-blur-sm border-border overflow-hidden">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Architecture Graph</CardTitle>
+              <Activity className="w-4 h-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <FileTree structure={metadata.structure} />
+              <DependencyGraph dependencies={metadata.dependencies} />
             </CardContent>
           </Card>
-          <Card className="bg-card/50 backdrop-blur-sm border-border">
-            <CardHeader>
-              <CardTitle>Language DNA</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {metadata.languages.map((lang) => (
-                <div key={lang.language} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">{lang.language}</span>
-                    <span className="text-muted-foreground">{lang.percentage}%</span>
+          <div className="space-y-6">
+            <Card className="bg-card/50 backdrop-blur-sm border-border">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Language DNA</CardTitle>
+                <PieIcon className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={metadata.languages}
+                      dataKey="fileCount"
+                      nameKey="language"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                    >
+                      {metadata.languages.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/50 backdrop-blur-sm border-border">
+              <CardHeader>
+                <CardTitle className="text-sm">Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {metadata.languages.slice(0, 5).map((lang, idx) => (
+                  <div key={lang.language} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }} />
+                      <span>{lang.language}</span>
+                    </div>
+                    <span className="text-muted-foreground font-mono">{lang.percentage}%</span>
                   </div>
-                  <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-primary transition-all duration-1000" 
-                      style={{ width: `${lang.percentage}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </AppLayout>
