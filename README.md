@@ -1,194 +1,189 @@
-# Repository Insights Engine (RIE) - ArchLens
+# Cloudflare Workers AI Chat Agent
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/archlens/rie)
-[![Status](https://img.shields.io/badge/status-draft-yellow.svg)](https://github.com/archlens/rie)
+[![Deploy to Cloudflare]([cloudflarebutton])]([cloudflarebutton])
 
-**ArchLens RIE** is an AI-powered repository analysis engine that transforms source code into comprehensive insights, interactive dashboards, validated documentation, and governance policies. Extract architectural DNA, visualize dependencies, detect drift, and generate production-grade READMEs automatically.
+A production-ready, full-stack AI chat application built on Cloudflare Workers. Features durable object-based chat agents, session management, streaming responses, tool calling (web search, weather, MCP integration), and a modern React UI with shadcn/ui components.
 
-## ✨ Core Features
+## ✨ Key Features
 
-| Feature | Description |
-|---------|-------------|
-| **Repository Ingestion** | ZIP upload, GitHub/GitLab URLs, local directories |
-| **Architecture DNA** | Interactive radar charts, dependency heatmaps, module hierarchies |
-| **Drift Detection** | Compare current vs baseline architecture, detect violations |
-| **AI Documentation** | Auto-generate README.md, ARCHITECTURE.md, SECURITY.md |
-| **Interactive Studio** | CLI + Web dashboard for analysis, editing, export |
-| **Policy Engine** | Custom governance rules, layer boundaries, pattern detection |
-| **Visualization Suite** | Mermaid diagrams, Graphviz graphs, Recharts dashboards |
-| **LLM Context** | Structured context for AI development workflows |
-
-## 🧬 Architecture DNA Visualizations
-
-```
-├── DNA Radar Chart: Core modules, coupling, complexity, stability
-├── Dependency Heatmap: Module interactions by frequency
-├── Layer Cake: Architecture layer compliance
-├── Call Graph: Function-level relationships
-└── Tech Radar: Framework/language distribution
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-- [Bun](https://bun.sh/) 1.1+
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)
-- Cloudflare account with AI Gateway
-
-### 1. Clone & Install
-```bash
-git clone https://github.com/archlens/rie
-cd rie
-bun install
-```
-
-### 2. Configure AI Gateway
-Edit `wrangler.jsonc`:
-```json
-{
-  "vars": {
-    "CF_AI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/openai",
-    "CF_AI_API_KEY": "your-cloudflare-api-token"
-  }
-}
-```
-
-Set secrets:
-```bash
-wrangler secret put CF_AI_API_KEY
-```
-
-### 3. Development
-```bash
-bun dev
-```
-Open `http://localhost:3000` - Dashboard + Studio ready!
-
-### 4. Deploy
-```bash
-bun run deploy
-```
-
-## 📊 Usage
-
-### Web Dashboard
-1. **Upload** ZIP or paste GitHub URL
-2. **Analyze** → View DNA charts, dependency graphs
-3. **Studio** → Edit metadata, customize docs
-4. **Export** → README, diagrams, `repository.meta.json`
-
-### CLI Studio
-```bash
-# Analyze repository
-bunx rie analyze ./my-project --output .rie/
-
-# Generate docs only
-bunx rie docs ./my-project --enhanced
-
-# Validate drift
-bunx rie validate ./my-project --baseline .rie/baseline.meta.json
-
-# Policy check
-bunx rie policy ./my-project --config policies/arch.json
-```
+- **AI-Powered Chat**: Integrated with Cloudflare AI Gateway (Gemini 2.5 Flash/Pro models) for fast, reliable responses
+- **Session Management**: Create, list, update, and delete persistent chat sessions with automatic title generation
+- **Streaming Responses**: Real-time message streaming with smooth UI updates
+- **Tool Calling**: Built-in tools for web search (SerpAPI), weather lookup, and extensible MCP server integration
+- **Multi-Model Support**: Switch between Gemini models dynamically per session
+- **Responsive UI**: Dark/light theme, mobile-friendly design with Tailwind CSS and shadcn/ui
+- **Type-Safe**: Full TypeScript coverage across frontend and Workers backend
+- **Production-Ready**: CORS, error handling, logging, and Cloudflare observability built-in
 
 ## 🛠️ Technology Stack
 
-| Layer | Technologies |
-|-------|--------------|
-| **Frontend** | React 18 + Vite + TypeScript + Tailwind + shadcn/ui + Recharts |
-| **Backend** | Cloudflare Workers + Hono + Durable Objects |
-| **Analysis** | tree-sitter + ts-morph + dependency-cruiser + AST parsers |
-| **AI** | Cloudflare AI Gateway (Gemini/@cf/meta models) |
-| **Visualization** | Mermaid + Graphviz + D3.js + Recharts |
-| **Dev** | Bun + Wrangler + Vitest + ESLint + Prettier |
+### Frontend
+- React 18 + TypeScript
+- Tailwind CSS + shadcn/ui
+- TanStack Query + React Router
+- Zustand (state management)
+- Lucide React (icons)
 
-## 🎛️ Governance & Settings
+### Backend
+- Cloudflare Workers + Hono (routing)
+- Agents SDK + Durable Objects (ChatAgent, AppController)
+- Cloudflare AI Gateway (OpenAI-compatible API)
+- Model Context Protocol (MCP) integration
 
-### Policy Editor (Studio)
-```
-├── Layer Boundaries: ui/ → domain/ → infra/
-├── Complexity Limits: max 15 per function
-├── Dependency Rules: no ui → infra coupling
-├── Pattern Detection: singleton, factory, observer
-└── Custom Metrics: your business rules
-```
+### Tools & Dev
+- Bun (package manager)
+- Vite (build tool)
+- Wrangler (Cloudflare CLI)
 
-### Configuration
-```json
-{
-  "analysis": {
-    "languages": ["typescript", "python", "javascript"],
-    "depthLimit": 5,
-    "llmMode": "enhanced"
-  },
-  "validation": {
-    "strictMode": true,
-    "driftThreshold": 0.1
-  }
-}
-```
+## 🚀 Quick Start
 
-## 📋 Core Outputs
+1. **Clone & Install**
+   ```bash
+   git clone <your-repo-url>
+   cd <project-name>
+   bun install
+   ```
 
-```
-.rie/
-├── repository.meta.json     # Canonical metadata (JSON Schema)
-├── README.md               # Generated documentation
-├── ARCHITECTURE.md         # Architecture deep-dive
-├── SECURITY.md             # Security posture
-├── assets/
-│   ├── dna-radar.svg
-│   ├── dep-graph.svg
-│   └── architecture.mermaid
-└── reports/
-    ├── validation.json
-    └── llm-context.json
-```
+2. **Configure Environment**
+   Edit `wrangler.jsonc`:
+   ```json
+   "vars": {
+     "CF_AI_BASE_URL": "https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/openai",
+     "CF_AI_API_KEY": "{your-cloudflare-api-token}",
+     "SERPAPI_KEY": "{your-serpapi-key}",
+     "OPENROUTER_API_KEY": "{optional-openrouter-key}"
+   }
+   ```
+   Set secrets: `wrangler secret put CF_AI_API_KEY` (etc.)
 
-## 🌐 API Endpoints
+3. **Development**
+   ```bash
+   bun dev
+   ```
+   Open `http://localhost:3000` (or your configured port).
 
-```
-POST  /api/analyze        # Start analysis (ZIP/URL)
-GET   /api/analyze/:id    # Poll results
-POST  /api/studio/:id     # Edit metadata
-GET   /api/export/:id     # Download artifacts
-POST  /api/policy         # Validate policies
-```
+4. **Deploy**
+   ```bash
+   bun run deploy
+   ```
 
-## ⚠️ AI Rate Limits
+[![Deploy to Cloudflare]([cloudflarebutton])]([cloudflarebutton])
 
-- **Free Tier**: 10 analyses/hour, 60s timeout
-- **Paid Gateway**: 1000 analyses/hour, parallel processing
-- **Local Mode**: No limits (requires local LLM)
+## 📋 Installation & Setup
 
-**Note**: Analysis time varies: 30s (small) → 5min (monorepo)
+### Prerequisites
+- [Bun](https://bun.sh/) 1.0+
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)
+- Cloudflare account with AI Gateway configured
+- Optional: SerpAPI key for web search
 
-## 🧪 Development Scripts
+### Steps
+1. **Install Dependencies**
+   ```bash
+   bun install
+   ```
 
+2. **Type Generation**
+   ```bash
+   bun run cf-typegen
+   ```
+
+3. **Environment Variables**
+   Update `wrangler.jsonc` with your Cloudflare AI Gateway details.
+   Add secrets:
+   ```bash
+   wrangler secret put SERPAPI_KEY
+   wrangler secret put OPENROUTER_API_KEY
+   ```
+
+4. **Run Locally**
+   ```bash
+   bun dev  # Starts Vite dev server + Worker preview
+   ```
+
+## 💻 Development
+
+### Scripts
 ```bash
-bun dev           # Start dev server + Worker
-bun build         # Production build
-bun lint          # Code quality
-bun test          # Unit + integration
-bun run deploy    # Deploy to Cloudflare
-bun studio        # CLI studio mode
+bun dev          # Development server (port 3000)
+bun build        # Build for production
+bun lint         # Lint codebase
+bun preview      # Preview production build
+bun run deploy   # Deploy to Cloudflare
+```
+
+### Project Structure
+```
+├── src/              # React frontend (pages, components, hooks)
+├── worker/           # Cloudflare Workers backend (agents, routes, tools)
+├── shared/           # Shared types/utils (if needed)
+├── tailwind.config.js # UI theming
+└── wrangler.jsonc    # Cloudflare config
+```
+
+### Extending Functionality
+- **Custom Routes**: Add to `worker/userRoutes.ts`
+- **New Tools**: Extend `worker/tools.ts` + MCP config in `worker/mcp-client.ts`
+- **UI Components**: Use shadcn/ui via `components.json`
+- **Chat Logic**: Modify `worker/chat.ts` or `worker/agent.ts`
+
+### Chat API Endpoints
+```
+POST /api/chat/:sessionId/chat     # Send message (supports streaming)
+GET  /api/chat/:sessionId/messages # Get session state
+DELETE /api/chat/:sessionId/clear  # Clear conversation
+POST /api/chat/:sessionId/model    # Update model
+
+POST /api/sessions                 # Create session
+GET  /api/sessions                 # List sessions
+DELETE /api/sessions/:id           # Delete session
+```
+
+## ☁️ Deployment to Cloudflare
+
+1. **Configure `wrangler.jsonc`** with your account ID and DO namespaces.
+
+2. **Deploy**
+   ```bash
+   bun run deploy
+   ```
+
+3. **Custom Domain** (optional)
+   ```bash
+   wrangler pages domain add your-domain.com
+   ```
+
+4. **Observability**
+   - Metrics/Logs: Cloudflare Dashboard > Workers > Your Worker
+   - Tail traffic with `wrangler tail`
+
+[![Deploy to Cloudflare]([cloudflarebutton])]([cloudflarebutton])
+
+## 🔧 Configuration
+
+### AI Gateway
+Create at [dash.cloudflare.com](https://dash.cloudflare.com) > AI > Gateways. Use `@cf/meta/llama-3.1-70b-instruct` or Gemini models.
+
+### SerpAPI (Web Search)
+Sign up at [serpapi.com](https://serpapi.com) for `SERPAPI_KEY`.
+
+### MCP Servers
+Add to `worker/mcp-client.ts`:
+```ts
+const MCP_SERVERS = [
+  { name: 'my-server', sseUrl: 'https://your-mcp-server/sse' }
+];
 ```
 
 ## 🤝 Contributing
 
-1. Fork → Clone → `bun install`
-2. Create feature branch
-3. Add tests → `bun test`
-4. PR with changelog entry
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push & open PR
 
-**Focus areas**: New language analyzers, visualization plugins, policy rules.
+Pull requests welcome! Focus on type safety and performance.
 
 ## 📄 License
 
-MIT - See [LICENSE](LICENSE)
-
----
-*Built with ❤️ for developer comprehension at [ArchLens](https://archlens.ai)*
-```
-//
+MIT License - see [LICENSE](LICENSE) file (or add one).
