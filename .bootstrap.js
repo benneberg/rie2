@@ -78,7 +78,7 @@ function updateWranglerJsonc() {
 
 function runSetupCommands() {
     const commands = [
-    "bun add jszip@^3.10.1",
+    "bun add jszip@^3.10.1 react-markdown@^9.0.1 mermaid@^10.9.2",
     "bun add react-dropzone@^14.2.3",
     "bun add react-markdown@^9.0.1",
     "bun add remark-gfm@^4.0.0",
