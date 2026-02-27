@@ -7,7 +7,7 @@ import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
 import { RIEAnalyzer } from './rie-analyzer';
 import { RIEValidator } from './rie-validator';
-import { RepositorySource, LLMContext } from '../src/lib/rie-types';
+import { RepositorySource, LLMContext, RIEConfig } from '../src/lib/rie-types';
 import { parseGitHubUrl } from '../src/lib/utils';
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
@@ -20,14 +20,16 @@ export class ChatAgent extends Agent<Env, ChatState> {
       excludePatterns: ['node_modules', '.git', 'dist', 'build', '.next'],
       analysisMode: 'standard',
       llmAugmentation: true,
-      maxFileSize: 10 * 1024 * 1024
+      maxFileSize: 10 * 1024 * 1024,
+      aiModel: 'gpt-4o-mini',
+      maxTokens: 4000
     }
   };
   async onStart(): Promise<void> {
     this.chatHandler = new ChatHandler(
       this.env.CF_AI_BASE_URL,
       this.env.CF_AI_API_KEY,
-      'gpt-4o-mini'
+      this.state.model
     );
   }
   async onRequest(request: Request): Promise<Response> {
@@ -52,7 +54,10 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private handleGetMessages(): Response {
     return Response.json({ success: true, data: this.state });
   }
-  private async handleUpdateConfig(body: { config: any }): Promise<Response> {
+  private async handleUpdateConfig(body: { config: RIEConfig }): Promise<Response> {
+    if (!body.config || typeof body.config !== 'object') {
+      return Response.json({ success: false, error: 'INVALID_CONFIG_FORMAT' }, { status: 400 });
+    }
     this.setState({ ...this.state, config: body.config });
     return Response.json({ success: true, config: this.state.config });
   }
@@ -92,13 +97,17 @@ export class ChatAgent extends Agent<Env, ChatState> {
         try {
           const zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${targetRef}`;
           const res = await fetch(zipUrl, { headers: { 'User-Agent': 'ArchLens-Agent' } });
-          if (!res.ok) throw new Error('GH Fetch Failed');
+          if (!res.ok) throw new Error(`GitHub Fetch Failed: ${res.statusText}`);
           const zip = await JSZip.loadAsync(await res.arrayBuffer());
-          analysisFiles = Object.entries(zip.files).filter(([_, f]) => !f.dir).map(([path, f]) => ({
-            name: path.split('/').slice(1).join('/'),
-            size: (f as any)._data?.uncompressedSize || 0,
-            type: 'file'
-          })).filter(f => f.name);
+          // Remove the GitHub-added root folder prefix (usually owner-repo-hash/)
+          analysisFiles = Object.entries(zip.files)
+            .filter(([_, f]) => !f.dir)
+            .map(([path, f]) => ({
+              name: path.split('/').slice(1).join('/'),
+              size: (f as any)._data?.uncompressedSize || 0,
+              type: 'file'
+            }))
+            .filter(f => f.name); // Filter out empty paths
         } catch (e) {
           return Response.json({ success: false, error: `Git Load Failed: ${e}` }, { status: 500 });
         }
@@ -107,11 +116,16 @@ export class ChatAgent extends Agent<Env, ChatState> {
     const metadata = await RIEAnalyzer.analyze(repoName, analysisFiles, this.state.config);
     metadata.validation = await RIEValidator.validate(metadata);
     metadata.source = source;
+    metadata.status = 'completed';
     if (this.chatHandler) {
-      const summaryPrompt = `Architectural analysis for "${repoName}". Health: ${metadata.validation.score}%. Provide a 1-sentence technical profile of this system based on its ${metadata.totalFiles} files and ${metadata.primaryLanguage} core.`;
-      const summary = await this.chatHandler.processMessage(summaryPrompt, []);
-      if (!metadata.documentation) metadata.documentation = {};
-      metadata.documentation['summary'] = summary.content;
+      const summaryPrompt = `Perform an architectural summary for project "${repoName}". Health: ${metadata.validation.score}%. Provide a 1-sentence technical profile based on its ${metadata.totalFiles} files and ${metadata.primaryLanguage} stack.`;
+      try {
+        const summary = await this.chatHandler.processMessage(summaryPrompt, []);
+        if (!metadata.documentation) metadata.documentation = {};
+        metadata.documentation['summary'] = summary.content;
+      } catch (e) {
+        console.warn('AI Summary generation failed:', e);
+      }
     }
     this.setState({ ...this.state, metadata });
     return Response.json({ success: true, metadata });
@@ -125,7 +139,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     const userMessage = createMessage('user', message.trim());
     this.setState({ ...this.state, messages: [...this.state.messages, userMessage], isProcessing: true });
     const metaContext = this.state.metadata ? 
-      `CONTEXT: ArchLens Scan for "${this.state.metadata.name}". Health Score: ${this.state.metadata.validation?.score}/100. Structure: ${this.state.metadata.isMonorepo ? 'Monorepo' : 'Monolith'}.` 
+      `CONTEXT: ArchLens Scan for "${this.state.metadata.name}". Health Score: ${this.state.metadata.validation?.score}/100. Structure: ${this.state.metadata.isMonorepo ? 'Monorepo' : 'Monolith'}. Source: ${this.state.metadata.source?.type}.`
       : `CONTEXT: General ArchLens Assistant.`;
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');
@@ -166,7 +180,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
   }
   private async handleGenerateDocs(body: { type: string }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false, error: 'No metadata' }, { status: 400 });
-    const prompt = `Synthesize technical ${body.type} for "${this.state.metadata.name}". Base it on high-signal architectural metadata. Use clean, brutalist Markdown.`;
+    const prompt = `Synthesize technical ${body.type} for project "${this.state.metadata.name}". Base it on architectural metadata. Use clean, brutalist Markdown. Focus on structural integrity and modularity.`;
     try {
       const response = await this.chatHandler!.processMessage(prompt, []);
       const documentation = { ...(this.state.metadata.documentation || {}), [body.type]: response.content };

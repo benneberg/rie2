@@ -48,8 +48,8 @@ export interface RIEConfig {
   analysisMode: 'standard' | 'deep';
   llmAugmentation: boolean;
   maxFileSize: number;
-  aiModel?: string;
-  maxTokens?: number;
+  aiModel: string;
+  maxTokens: number;
 }
 export interface RepositorySource {
   type: 'upload' | 'github';
@@ -81,6 +81,7 @@ export interface RepositoryMetadata {
   isMonorepo?: boolean;
   workspaces?: string[];
   analyzedAt: number;
+  status?: 'analyzing' | 'completed' | 'failed';
 }
 export interface ScanResult {
   success: boolean;

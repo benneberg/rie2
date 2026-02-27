@@ -19,10 +19,14 @@ export function ChatWidget() {
       loadHistory();
     }
   }, [isOpen]);
-  useEffect(() => {
+  const scrollToBottom = () => {
     if (scrollRef.current) {
-      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+      scrollRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
+  };
+  useEffect(() => {
+    const timer = setTimeout(scrollToBottom, 100);
+    return () => clearTimeout(timer);
   }, [messages, isTyping]);
   const loadHistory = async () => {
     const response = await chatService.getMessages();
@@ -44,6 +48,8 @@ export function ChatWidget() {
     let fullText = '';
     const response = await chatService.sendMessage(userMsg.content, undefined, (chunk) => {
       fullText += chunk;
+      // Force scroll during streaming
+      scrollToBottom();
     });
     if (response.success) {
       await loadHistory();
@@ -51,7 +57,7 @@ export function ChatWidget() {
     setIsTyping(false);
   };
   return (
-    <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-4">
+    <div className="fixed bottom-24 right-6 z-[100] flex flex-col items-end gap-4">
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -67,10 +73,10 @@ export function ChatWidget() {
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div className="flex flex-col">
-                    <CardTitle className="text-xs font-display font-black uppercase tracking-widest">ArchLens_AI</CardTitle>
+                    <CardTitle className="text-[10px] font-display font-black uppercase tracking-widest">ArchLens_AI_Core</CardTitle>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      <span className="text-[9px] font-mono font-bold uppercase tracking-widest opacity-80">Sync_Active</span>
+                      <span className="text-[8px] font-mono font-bold uppercase tracking-widest opacity-80">Online</span>
                     </div>
                   </div>
                 </div>
@@ -78,9 +84,9 @@ export function ChatWidget() {
                   <Minimize2 className="w-4 h-4" />
                 </Button>
               </CardHeader>
-              <CardContent className="flex-1 p-0 flex flex-col">
-                <ScrollArea className="flex-1 p-6">
-                  <div className="space-y-6">
+              <CardContent className="flex-1 p-0 flex flex-col min-h-0">
+                <ScrollArea className="flex-1">
+                  <div className="p-6 space-y-6">
                     {messages.map((msg) => (
                       <div key={msg.id} className={cn("flex gap-3", msg.role === 'user' ? "flex-row-reverse" : "flex-row")}>
                         <div className={cn(
@@ -90,9 +96,9 @@ export function ChatWidget() {
                           {msg.role === 'user' ? <User className="w-4 h-4 text-primary-foreground" /> : <Bot className="w-4 h-4 text-primary" />}
                         </div>
                         <div className={cn(
-                          "max-w-[85%] p-4 rounded-xl text-xs font-mono tracking-tight leading-relaxed border shadow-sm",
-                          msg.role === 'user' 
-                            ? "bg-primary text-primary-foreground border-primary/20" 
+                          "max-w-[85%] p-4 rounded-xl text-[11px] font-mono tracking-tight leading-relaxed border shadow-sm",
+                          msg.role === 'user'
+                            ? "bg-primary text-primary-foreground border-primary/20"
                             : "bg-white/5 border-white/5 text-foreground/90"
                         )}>
                           {msg.content}
@@ -106,11 +112,11 @@ export function ChatWidget() {
                         </div>
                         <div className="bg-white/5 border border-white/5 p-4 rounded-xl flex items-center gap-3">
                           <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                          <span className="text-[10px] font-mono uppercase tracking-widest opacity-60">Mapping_Repo...</span>
+                          <span className="text-[9px] font-mono uppercase tracking-widest opacity-60">Mapping_Topology...</span>
                         </div>
                       </div>
                     )}
-                    <div ref={scrollRef} />
+                    <div ref={scrollRef} className="h-1 w-full" />
                   </div>
                 </ScrollArea>
               </CardContent>
@@ -119,8 +125,8 @@ export function ChatWidget() {
                   <Input
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="QUERY REPOSITORY ARCHITECTURE..."
-                    className="flex-1 bg-black/40 border-white/10 font-mono text-[10px] tracking-widest focus-visible:ring-primary/50"
+                    placeholder="QUERY SYSTEM ARCHITECTURE..."
+                    className="flex-1 bg-black/40 border-white/10 font-mono text-[10px] tracking-widest focus-visible:ring-primary/50 uppercase"
                     disabled={isTyping}
                   />
                   <Button size="icon" type="submit" disabled={!input.trim() || isTyping} className="bg-primary hover:bg-primary/90 text-primary-foreground">
