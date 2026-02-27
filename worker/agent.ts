@@ -7,7 +7,7 @@ import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
 import { RIEAnalyzer } from './rie-analyzer';
 import { RIEValidator } from './rie-validator';
-import { RepositorySource } from '../src/lib/rie-types';
+import { RepositorySource, LLMContext } from '../src/lib/rie-types';
 import { parseGitHubUrl } from '../src/lib/utils';
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
@@ -42,6 +42,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
       if (method === 'POST' && url.pathname === '/generate-docs') return this.handleGenerateDocs(await request.json());
       if (method === 'POST' && url.pathname === '/save-docs') return this.handleSaveDocs(await request.json());
       if (method === 'POST' && url.pathname === '/update-config') return this.handleUpdateConfig(await request.json());
+      if (method === 'GET' && url.pathname === '/llm-context') return this.handleGetLLMContext();
       return Response.json({ success: false, error: API_RESPONSES.NOT_FOUND }, { status: 404 });
     } catch (error) {
       console.error('Agent Request Error:', error);
@@ -54,6 +55,20 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private async handleUpdateConfig(body: { config: any }): Promise<Response> {
     this.setState({ ...this.state, config: body.config });
     return Response.json({ success: true, config: this.state.config });
+  }
+  private async handleGetLLMContext(): Promise<Response> {
+    if (!this.state.metadata) return Response.json({ success: false, error: 'Metadata empty' }, { status: 400 });
+    const meta = this.state.metadata;
+    const context: LLMContext = {
+      projectName: meta.name,
+      summary: meta.documentation?.['summary'] || '',
+      healthScore: meta.validation?.score || 0,
+      primaryLanguage: meta.primaryLanguage,
+      structure: meta.structure.slice(0, 100).map(f => f.path),
+      dependencies: meta.dependencies,
+      excerpts: {}
+    };
+    return Response.json({ success: true, context });
   }
   private async handleSaveDocs(body: { documentation: Record<string, string> }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false, error: 'Metadata not initialized' }, { status: 400 });
@@ -73,80 +88,45 @@ export class ChatAgent extends Agent<Env, ChatState> {
       if (parsed) {
         const { owner, repo, ref } = parsed;
         const targetRef = ref || 'main';
-        source.ref = targetRef;
-        // Try the specified ref, fallback to 'master' if 'main' fails
-        let zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${targetRef}`;
+        source = { type: 'github', url: body.url, repo: `${owner}/${repo}`, ref: targetRef };
         try {
-          let res = await fetch(zipUrl, {
-            headers: { 'User-Agent': 'ArchLens-Ingestion-Agent' }
-          });
-          // Fallback logic for default branch if 'main' was assumed but it is actually 'master'
-          if (!res.ok && targetRef === 'main') {
-            const fallbackUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/master`;
-            res = await fetch(fallbackUrl, {
-              headers: { 'User-Agent': 'ArchLens-Ingestion-Agent' }
-            });
-            if (res.ok) source.ref = 'master';
-          }
-          if (!res.ok) throw new Error(`GitHub API returned ${res.status} for ${zipUrl}`);
-          const arrayBuffer = await res.arrayBuffer();
-          const zip = await JSZip.loadAsync(arrayBuffer);
-          const filesInZip: any[] = [];
-          for (const [path, file] of Object.entries(zip.files)) {
-            if (file.dir) continue;
-            const normalizedPath = path.split('/').slice(1).join('/');
-            if (!normalizedPath) continue;
-            filesInZip.push({
-              name: normalizedPath,
-              size: (file as any)._data?.uncompressedSize || 0,
-              type: 'file'
-            });
-          }
-          analysisFiles = filesInZip;
-          source = {
-            type: 'github',
-            url: body.url,
-            repo: `${owner}/${repo}`,
-            ref: source.ref || targetRef
-          };
+          const zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${targetRef}`;
+          const res = await fetch(zipUrl, { headers: { 'User-Agent': 'ArchLens-Agent' } });
+          if (!res.ok) throw new Error('GH Fetch Failed');
+          const zip = await JSZip.loadAsync(await res.arrayBuffer());
+          analysisFiles = Object.entries(zip.files).filter(([_, f]) => !f.dir).map(([path, f]) => ({
+            name: path.split('/').slice(1).join('/'),
+            size: (f as any)._data?.uncompressedSize || 0,
+            type: 'file'
+          })).filter(f => f.name);
         } catch (e) {
-          return Response.json({ success: false, error: `Git Ingestion Failed: ${e instanceof Error ? e.message : 'Unknown'}` }, { status: 500 });
+          return Response.json({ success: false, error: `Git Load Failed: ${e}` }, { status: 500 });
         }
       }
     }
     const metadata = await RIEAnalyzer.analyze(repoName, analysisFiles, this.state.config);
-    const validation = await RIEValidator.validate(metadata);
-    metadata.validation = validation;
+    metadata.validation = await RIEValidator.validate(metadata);
     metadata.source = source;
-    if (!metadata.documentation) metadata.documentation = {};
-    try {
-      if (this.chatHandler) {
-        const topFiles = metadata.structure.slice(0, 50).map(f => `${f.path} (${f.language})`).join(', ');
-        const depsCount = metadata.dependencies.length;
-        const summaryPrompt = `Provide a concise, expert architectural map for "${repoName}". Top files: [${topFiles}]. Dependency relationships: ${depsCount}. Describe the architectural pattern and main technology stack in one punchy sentence.`;
-        const summaryResponse = await this.chatHandler.processMessage(summaryPrompt, []);
-        metadata.documentation['summary'] = summaryResponse.content;
-      }
-    } catch (e) {
-      console.error('Failed to generate AI summary:', e);
+    if (this.chatHandler) {
+      const summaryPrompt = `Architectural analysis for "${repoName}". Health: ${metadata.validation.score}%. Provide a 1-sentence technical profile of this system based on its ${metadata.totalFiles} files and ${metadata.primaryLanguage} core.`;
+      const summary = await this.chatHandler.processMessage(summaryPrompt, []);
+      if (!metadata.documentation) metadata.documentation = {};
+      metadata.documentation['summary'] = summary.content;
     }
     this.setState({ ...this.state, metadata });
     return Response.json({ success: true, metadata });
   }
   private async handleChatMessage(body: { message: string; model?: string; stream?: boolean }): Promise<Response> {
     const { message, model, stream } = body;
-    if (!message?.trim()) return Response.json({ success: false, error: API_RESPONSES.MISSING_MESSAGE }, { status: 400 });
     if (model && model !== this.state.model) {
       this.setState({ ...this.state, model });
       this.chatHandler?.updateModel(model);
     }
     const userMessage = createMessage('user', message.trim());
     this.setState({ ...this.state, messages: [...this.state.messages, userMessage], isProcessing: true });
-    const metaContext = this.state.metadata ?
-      `CONTEXT: ArchLens Repository "${this.state.metadata.name}". Health: ${this.state.metadata.validation?.score}/100.
-       LANG: ${this.state.metadata.primaryLanguage}. FILES: ${this.state.metadata.totalFiles}. SOURCE: ${this.state.metadata.source?.type}.
-       MAP: ${this.state.metadata.structure.slice(0, 30).map(f => f.path).join(', ')}.`
-      : `CONTEXT: ArchLens Assistant. No active repository context.`;
+    const metaContext = this.state.metadata ? 
+      `CONTEXT: ArchLens Scan for "${this.state.metadata.name}". Health Score: ${this.state.metadata.validation?.score}/100. Structure: ${this.state.metadata.isMonorepo ? 'Monorepo' : 'Monolith'}.` 
+      : `CONTEXT: General ArchLens Assistant.`;
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');
       if (stream) {
@@ -155,33 +135,22 @@ export class ChatAgent extends Agent<Env, ChatState> {
         const encoder = createEncoder();
         (async () => {
           try {
-            const streamingMessageRef = { value: '' };
-            this.setState({ ...this.state, streamingMessage: '' });
-            const response = await this.chatHandler!.processMessage(
-              `${metaContext}\n\nUSER QUERY: ${message}`,
-              this.state.messages,
-              (chunk) => {
-                streamingMessageRef.value += chunk;
-                this.setState({ ...this.state, streamingMessage: streamingMessageRef.value });
-                writer.write(encoder.encode(chunk));
-              }
-            );
-            const assistantMessage = createMessage('assistant', response.content, response.toolCalls);
-            this.setState({ ...this.state, messages: [...this.state.messages, assistantMessage], isProcessing: false, streamingMessage: '' });
-          } catch (e) {
-            console.error('Streaming error in agent:', e);
+            const response = await this.chatHandler!.processMessage(`${metaContext}\n\nQUERY: ${message}`, this.state.messages, (chunk) => {
+              writer.write(encoder.encode(chunk));
+            });
+            const assistantMessage = createMessage('assistant', response.content);
+            this.setState({ ...this.state, messages: [...this.state.messages, assistantMessage], isProcessing: false });
           } finally {
             writer.close();
           }
         })();
         return createStreamResponse(readable);
       }
-      const response = await this.chatHandler.processMessage(`${metaContext}\n\nUSER QUERY: ${message}`, this.state.messages);
-      const assistantMessage = createMessage('assistant', response.content, response.toolCalls);
+      const response = await this.chatHandler.processMessage(`${metaContext}\n\nQUERY: ${message}`, this.state.messages);
+      const assistantMessage = createMessage('assistant', response.content);
       this.setState({ ...this.state, messages: [...this.state.messages, assistantMessage], isProcessing: false });
       return Response.json({ success: true, data: this.state });
     } catch (error) {
-      console.error('Chat processing error:', error);
       this.setState({ ...this.state, isProcessing: false });
       return Response.json({ success: false, error: API_RESPONSES.PROCESSING_ERROR }, { status: 500 });
     }
@@ -196,14 +165,10 @@ export class ChatAgent extends Agent<Env, ChatState> {
     return Response.json({ success: true, data: this.state });
   }
   private async handleGenerateDocs(body: { type: string }): Promise<Response> {
-    if (!this.state.metadata) return Response.json({ success: false, error: 'No metadata available' }, { status: 400 });
-    const prompt = `Draft technical ${body.type} for "${this.state.metadata.name}".
-    Project Map: ${JSON.stringify(this.state.metadata.structure.slice(0, 40))}.
-    Dependencies: ${JSON.stringify(this.state.metadata.dependencies.slice(0, 15))}.
-    Requirements: Professional tone, clear sections, GitHub-flavored Markdown.`;
+    if (!this.state.metadata) return Response.json({ success: false, error: 'No metadata' }, { status: 400 });
+    const prompt = `Synthesize technical ${body.type} for "${this.state.metadata.name}". Base it on high-signal architectural metadata. Use clean, brutalist Markdown.`;
     try {
-      if (!this.chatHandler) throw new Error('Chat handler not initialized');
-      const response = await this.chatHandler.processMessage(prompt, []);
+      const response = await this.chatHandler!.processMessage(prompt, []);
       const documentation = { ...(this.state.metadata.documentation || {}), [body.type]: response.content };
       const updatedMetadata = { ...this.state.metadata, documentation };
       this.setState({ ...this.state, metadata: updatedMetadata });

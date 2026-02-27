@@ -12,16 +12,19 @@ export interface LanguageDetection {
   fileCount: number;
   color?: string;
 }
+export type GraphType = 'module' | 'package' | 'call';
 export interface DependencyEdge {
   source: string;
   target: string;
-  type: 'import' | 'require' | 'static';
+  type: 'import' | 'require' | 'static' | 'workspace';
 }
 export interface ValidationIssue {
+  id: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   message: string;
   category: 'consistency' | 'completeness' | 'security' | 'structure';
   suggestion?: string;
+  autoFixable?: boolean;
 }
 export interface ValidationCheck {
   label: string;
@@ -30,6 +33,12 @@ export interface ValidationCheck {
 }
 export interface ValidationReport {
   score: number;
+  categories: {
+    consistency: number;
+    completeness: number;
+    security: number;
+    structure: number;
+  };
   checks: ValidationCheck[];
   issues: ValidationIssue[];
   updatedAt: number;
@@ -39,12 +48,23 @@ export interface RIEConfig {
   analysisMode: 'standard' | 'deep';
   llmAugmentation: boolean;
   maxFileSize: number;
+  aiModel?: string;
+  maxTokens?: number;
 }
 export interface RepositorySource {
   type: 'upload' | 'github';
   url?: string;
   repo?: string;
   ref?: string;
+}
+export interface LLMContext {
+  projectName: string;
+  summary: string;
+  healthScore: number;
+  primaryLanguage: string;
+  structure: string[];
+  dependencies: DependencyEdge[];
+  excerpts: Record<string, string>;
 }
 export interface RepositoryMetadata {
   name: string;
@@ -58,6 +78,8 @@ export interface RepositoryMetadata {
   validation?: ValidationReport;
   config?: RIEConfig;
   source?: RepositorySource;
+  isMonorepo?: boolean;
+  workspaces?: string[];
   analyzedAt: number;
 }
 export interface ScanResult {

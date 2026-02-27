@@ -5,6 +5,13 @@ export class RIEAnalyzer {
     const filteredFiles = files.filter(f => !excludeList.some(pattern => f.name.includes(pattern)));
     const totalFiles = filteredFiles.length;
     const totalSize = filteredFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+    // Monorepo Detection
+    const packageJson = files.find(f => f.name === 'package.json');
+    const lernaJson = files.find(f => f.name === 'lerna.json');
+    const pnpmWorkspace = files.find(f => f.name === 'pnpm-workspace.yaml');
+    let isMonorepo = !!(lernaJson || pnpmWorkspace);
+    let workspaces: string[] = [];
+    // Language & Architecture Detection
     const languageCounts: Record<string, number> = {};
     const dependencies: DependencyEdge[] = [];
     const structure: FileEntry[] = filteredFiles.map(f => {
@@ -12,31 +19,22 @@ export class RIEAnalyzer {
       const ext = parts.length > 1 ? parts.pop()?.toLowerCase() || '' : 'unknown';
       const lang = this.detectLanguage(ext);
       languageCounts[lang] = (languageCounts[lang] || 0) + 1;
-      // Deterministic Heuristic Parsing
       const fileName = f.name.split('/').pop() || '';
       const baseName = fileName.replace(/\.[^/.]+$/, "");
-      // 1. Same-name, different-extension relationships (e.g., App.tsx -> App.css)
-      const relatedFiles = filteredFiles.filter(other => {
-        const otherName = other.name.split('/').pop() || '';
-        return otherName.startsWith(baseName) && other.name !== f.name && (
-          otherName.endsWith('.css') || otherName.endsWith('.scss') || otherName.endsWith('.test.ts')
-        );
-      });
-      // 2. Common Structural Pattern Relationships (e.g., components -> hooks/utils)
+      // Heuristic parsing for dependencies
       if (f.name.includes('src/components')) {
         const targets = filteredFiles.filter(other => 
-          (other.name.includes('src/hooks') || other.name.includes('src/lib') || other.name.includes('src/utils')) &&
-          ['ts', 'js'].includes(other.name.split('.').pop() || '')
+          (other.name.includes('src/hooks') || other.name.includes('src/lib')) &&
+          ['ts', 'js', 'tsx'].includes(other.name.split('.').pop() || '')
         ).slice(0, 1);
-        relatedFiles.push(...targets);
+        targets.forEach(t => dependencies.push({ source: f.name, target: t.name, type: 'import' }));
       }
-      relatedFiles.forEach(target => {
-        dependencies.push({
-          source: f.name,
-          target: target.name,
-          type: target.name.endsWith('.css') ? 'static' : 'import'
-        });
-      });
+      // Check for workspace members
+      if (fileName === 'package.json' && f.name !== 'package.json') {
+        const workspacePath = f.name.replace('/package.json', '');
+        workspaces.push(workspacePath);
+        isMonorepo = true;
+      }
       return {
         path: f.name,
         name: fileName,
@@ -61,6 +59,8 @@ export class RIEAnalyzer {
       languages,
       structure,
       dependencies: Array.from(new Set(dependencies.map(d => JSON.stringify(d)))).map(s => JSON.parse(s)).slice(0, 50),
+      isMonorepo,
+      workspaces: [...new Set(workspaces)],
       config: config || {
         excludePatterns: excludeList,
         analysisMode: 'standard',
@@ -75,7 +75,8 @@ export class RIEAnalyzer {
       'ts': 'TypeScript', 'tsx': 'TypeScript', 'js': 'JavaScript', 'jsx': 'JavaScript',
       'py': 'Python', 'go': 'Go', 'rs': 'Rust', 'rb': 'Ruby', 'java': 'Java',
       'cpp': 'C++', 'c': 'C', 'cs': 'C#', 'php': 'PHP', 'html': 'HTML',
-      'css': 'CSS', 'json': 'JSON', 'md': 'Markdown', 'yaml': 'YAML', 'yml': 'YAML'
+      'css': 'CSS', 'json': 'JSON', 'md': 'Markdown', 'yaml': 'YAML', 'yml': 'YAML',
+      'toml': 'TOML'
     };
     return map[ext] || 'Other';
   }
