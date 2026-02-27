@@ -23,7 +23,6 @@ export function SettingsPage() {
     maxFileSize: 10
   });
   const [newPattern, setNewPattern] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const loadConfig = useCallback(async () => {
     try {
       const response = await chatService.getMessages();
@@ -40,7 +39,7 @@ export function SettingsPage() {
       return;
     }
     loadConfig();
-  }, [sessionId, loadConfig]);
+  }, [sessionId, loadConfig, navigate]);
   const handleSave = async () => {
     if (!sessionId) return;
     const toastId = toast.loading('PERSISTING_SESSION_CONFIG...');
@@ -79,9 +78,9 @@ export function SettingsPage() {
               </CardHeader>
               <CardContent className="p-8 space-y-8">
                 <div className="flex gap-4">
-                  <Input 
-                    placeholder="E.G. NODE_MODULES, *.LOG" 
-                    className="bg-black/40 border-white/10 font-mono text-xs tracking-widest"
+                  <Input
+                    placeholder="E.G. NODE_MODULES, *.LOG"
+                    className="bg-black/40 border-white/10 font-mono text-xs tracking-widest focus-visible:ring-[#f59e0b]"
                     value={newPattern}
                     onChange={(e) => setNewPattern(e.target.value)}
                     onKeyDown={(e) => {
@@ -100,7 +99,7 @@ export function SettingsPage() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   {config.excludePatterns.map(p => (
-                    <Badge key={p} className="bg-white/5 border border-white/10 px-4 py-2 flex items-center gap-3">
+                    <Badge key={p} className="bg-white/5 border border-white/10 px-4 py-2 flex items-center gap-3 transition-all hover:bg-white/10">
                       <span className="font-mono text-[10px] tracking-widest">{p}</span>
                       <Trash2 className="w-3 h-3 opacity-30 cursor-pointer hover:opacity-100 hover:text-red-500" onClick={() => setConfig({...config, excludePatterns: config.excludePatterns.filter(i => i !== p)})} />
                     </Badge>

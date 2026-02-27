@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/rie/StatsCard';
@@ -17,15 +17,7 @@ export function DashboardPage() {
   const sessionId = searchParams.get('session');
   const [metadata, setMetadata] = useState<RepositoryMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  useEffect(() => {
-    if (sessionId) {
-      chatService.switchSession(sessionId);
-      fetchMetadata();
-    } else {
-      navigate('/');
-    }
-  }, [sessionId]);
-  const fetchMetadata = async () => {
+  const fetchMetadata = useCallback(async () => {
     try {
       const response = await chatService.getMessages();
       if (response.success && response.data?.metadata) {
@@ -36,16 +28,24 @@ export function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-  if (isLoading) return <AppLayout container><Skeleton className="h-[600px] w-full glass" /></AppLayout>;
+  }, []);
+  useEffect(() => {
+    if (sessionId) {
+      chatService.switchSession(sessionId);
+      fetchMetadata();
+    } else {
+      navigate('/');
+    }
+  }, [sessionId, navigate, fetchMetadata]);
+  if (isLoading) return <AppLayout container><Skeleton className="h-[600px] w-full glass animate-pulse" /></AppLayout>;
   if (!metadata) return <AppLayout container><div className="text-center py-20 font-display text-4xl uppercase opacity-20">No active session</div></AppLayout>;
   const healthScore = metadata.validation?.score || 0;
   return (
     <AppLayout container>
       <div className="space-y-12">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 animate-reveal">
           <div className="space-y-2">
-            <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-[#f59e0b]/30 text-[#f59e0b]">LIVE_SCAN_REPORT</Badge>
+            <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-[#f59e0b]/30 text-[#f59e0b] animate-reveal">LIVE_SCAN_REPORT</Badge>
             <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-none">{metadata.name}</h1>
           </div>
           <div className="flex gap-4">
@@ -53,7 +53,6 @@ export function DashboardPage() {
             <Button onClick={() => navigate(`/settings?session=${sessionId}`)} className="btn-brutal-amber">Configuration</Button>
           </div>
         </header>
-        {/* Brutalist Narrative Bar */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           <Card className="lg:col-span-3 glass border-l-4 border-l-[#f59e0b] shadow-brutal-dark">
             <CardContent className="p-8">

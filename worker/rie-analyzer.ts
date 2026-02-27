@@ -2,36 +2,44 @@ import { RepositoryMetadata, FileEntry, LanguageDetection, DependencyEdge, RIECo
 export class RIEAnalyzer {
   static async analyze(repoName: string, files: any[], config?: RIEConfig): Promise<RepositoryMetadata> {
     const excludeList = config?.excludePatterns || ['node_modules', '.git', 'dist', 'build', '.next'];
-    // Filter files based on exclusion patterns
-    const filteredFiles = files.filter(f => {
-      return !excludeList.some(pattern => f.name.includes(pattern));
-    });
+    const filteredFiles = files.filter(f => !excludeList.some(pattern => f.name.includes(pattern)));
     const totalFiles = filteredFiles.length;
     const totalSize = filteredFiles.reduce((acc, f) => acc + (f.size || 0), 0);
     const languageCounts: Record<string, number> = {};
     const dependencies: DependencyEdge[] = [];
     const structure: FileEntry[] = filteredFiles.map(f => {
-      const ext = f.name.split('.').pop()?.toLowerCase() || 'unknown';
+      const parts = f.name.split('.');
+      const ext = parts.length > 1 ? parts.pop()?.toLowerCase() || '' : 'unknown';
       const lang = this.detectLanguage(ext);
       languageCounts[lang] = (languageCounts[lang] || 0) + 1;
-      // Simulate dependency extraction
-      if (['ts', 'tsx', 'js', 'jsx'].includes(ext)) {
-        const potentialTargets = filteredFiles.filter(other => 
-          other.name !== f.name && 
-          other.name.includes('/') && 
-          ['ts', 'tsx', 'js', 'jsx'].some(e => other.name.endsWith(e))
+      // Deterministic Heuristic Parsing
+      const fileName = f.name.split('/').pop() || '';
+      const baseName = fileName.replace(/\.[^/.]+$/, "");
+      // 1. Same-name, different-extension relationships (e.g., App.tsx -> App.css)
+      const relatedFiles = filteredFiles.filter(other => {
+        const otherName = other.name.split('/').pop() || '';
+        return otherName.startsWith(baseName) && other.name !== f.name && (
+          otherName.endsWith('.css') || otherName.endsWith('.scss') || otherName.endsWith('.test.ts')
+        );
+      });
+      // 2. Common Structural Pattern Relationships (e.g., components -> hooks/utils)
+      if (f.name.includes('src/components')) {
+        const targets = filteredFiles.filter(other => 
+          (other.name.includes('src/hooks') || other.name.includes('src/lib') || other.name.includes('src/utils')) &&
+          ['ts', 'js'].includes(other.name.split('.').pop() || '')
         ).slice(0, 1);
-        potentialTargets.forEach(target => {
-          dependencies.push({
-            source: f.name,
-            target: target.name,
-            type: 'import'
-          });
-        });
+        relatedFiles.push(...targets);
       }
+      relatedFiles.forEach(target => {
+        dependencies.push({
+          source: f.name,
+          target: target.name,
+          type: target.name.endsWith('.css') ? 'static' : 'import'
+        });
+      });
       return {
         path: f.name,
-        name: f.name.split('/').pop() || f.name,
+        name: fileName,
         size: f.size || 0,
         type: f.type === 'directory' ? 'directory' : 'file',
         extension: ext,
@@ -42,7 +50,7 @@ export class RIEAnalyzer {
       .map(([language, count]) => ({
         language,
         fileCount: count,
-        percentage: Math.round((count / totalFiles) * 100)
+        percentage: Math.round((count / Math.max(1, totalFiles)) * 100)
       }))
       .sort((a, b) => b.fileCount - a.fileCount);
     return {
@@ -52,7 +60,7 @@ export class RIEAnalyzer {
       primaryLanguage: languages[0]?.language || 'Unknown',
       languages,
       structure,
-      dependencies,
+      dependencies: Array.from(new Set(dependencies.map(d => JSON.stringify(d)))).map(s => JSON.parse(s)).slice(0, 50),
       config: config || {
         excludePatterns: excludeList,
         analysisMode: 'standard',
@@ -64,23 +72,10 @@ export class RIEAnalyzer {
   }
   private static detectLanguage(ext: string): string {
     const map: Record<string, string> = {
-      'ts': 'TypeScript',
-      'tsx': 'TypeScript',
-      'js': 'JavaScript',
-      'jsx': 'JavaScript',
-      'py': 'Python',
-      'go': 'Go',
-      'rs': 'Rust',
-      'rb': 'Ruby',
-      'java': 'Java',
-      'cpp': 'C++',
-      'c': 'C',
-      'cs': 'C#',
-      'php': 'PHP',
-      'html': 'HTML',
-      'css': 'CSS',
-      'json': 'JSON',
-      'md': 'Markdown'
+      'ts': 'TypeScript', 'tsx': 'TypeScript', 'js': 'JavaScript', 'jsx': 'JavaScript',
+      'py': 'Python', 'go': 'Go', 'rs': 'Rust', 'rb': 'Ruby', 'java': 'Java',
+      'cpp': 'C++', 'c': 'C', 'cs': 'C#', 'php': 'PHP', 'html': 'HTML',
+      'css': 'CSS', 'json': 'JSON', 'md': 'Markdown', 'yaml': 'YAML', 'yml': 'YAML'
     };
     return map[ext] || 'Other';
   }
