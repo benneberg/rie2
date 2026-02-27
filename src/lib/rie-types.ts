@@ -17,6 +17,29 @@ export interface DependencyEdge {
   target: string;
   type: 'import' | 'require' | 'static';
 }
+export interface ValidationIssue {
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  message: string;
+  category: 'consistency' | 'completeness' | 'security' | 'structure';
+  suggestion?: string;
+}
+export interface ValidationCheck {
+  label: string;
+  status: 'pass' | 'fail' | 'warn';
+  message: string;
+}
+export interface ValidationReport {
+  score: number;
+  checks: ValidationCheck[];
+  issues: ValidationIssue[];
+  updatedAt: number;
+}
+export interface RIEConfig {
+  excludePatterns: string[];
+  analysisMode: 'standard' | 'deep';
+  llmAugmentation: boolean;
+  maxFileSize: number;
+}
 export interface RepositoryMetadata {
   name: string;
   totalFiles: number;
@@ -26,6 +49,8 @@ export interface RepositoryMetadata {
   structure: FileEntry[];
   dependencies: DependencyEdge[];
   documentation?: Record<string, string>;
+  validation?: ValidationReport;
+  config?: RIEConfig;
   analyzedAt: number;
 }
 export interface ScanResult {

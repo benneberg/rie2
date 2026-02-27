@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Upload, Link as LinkIcon, Sparkles, ArrowRight, Shield, Zap, Search, Fingerprint, Map, Cpu } from 'lucide-react';
+import { Upload, Link as LinkIcon, Sparkles, Zap, Search, Fingerprint, Map, Cpu } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,37 +14,43 @@ export function HomePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [githubUrl, setGithubUrl] = useState('');
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
+    if (acceptedFiles.length === 0 || isUploading) return;
     setIsUploading(true);
     const toastId = toast.loading('Reading repository contents...');
     try {
       const sessionId = crypto.randomUUID();
-      toast.info('Synthesizing metadata...', { id: toastId });
+      console.log(`[ArchLens] Starting analysis for session: ${sessionId}`);
       const response = await fetch(`/api/analyze/${sessionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: acceptedFiles[0]?.name.split('.')[0] || "Repo",
+          name: acceptedFiles[0]?.name.split('.')[0] || "Repository",
           files: acceptedFiles.map(f => ({ name: f.name, size: f.size, type: 'file' }))
         }),
       });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
       const result = await response.json();
       if (result.success) {
         toast.success('Analysis complete!', { id: toastId });
         navigate(`/dashboard?session=${sessionId}`);
       } else {
-        throw new Error(result.error);
+        throw new Error(result.error || 'Unknown analysis error');
       }
     } catch (error) {
+      console.error('[ArchLens] Scan error:', error);
       toast.error('Scan failed: ' + (error as Error).message, { id: toastId });
     } finally {
       setIsUploading(false);
     }
-  }, [navigate]);
+  }, [navigate, isUploading]);
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'application/zip': ['.zip'] },
-    multiple: false
+    multiple: false,
+    disabled: isUploading
   });
   const features = [
     { icon: Fingerprint, title: "Deep Scan", desc: "Binary-level structural analysis" },
@@ -80,13 +86,14 @@ export function HomePage() {
               {...getRootProps()}
               className={cn(
                 "p-8 border-2 border-dashed transition-all cursor-pointer group bg-card/40 backdrop-blur-md relative overflow-hidden",
-                isDragActive ? "border-primary bg-primary/5 ring-4 ring-primary/10" : "border-border hover:border-primary/50"
+                isDragActive ? "border-primary bg-primary/5 ring-4 ring-primary/10" : "border-border hover:border-primary/50",
+                isUploading && "opacity-50 cursor-wait"
               )}
             >
               <input {...getInputProps()} />
               <div className="flex flex-col items-center gap-4">
                 <div className="p-4 rounded-full bg-secondary group-hover:bg-primary/10 transition-colors">
-                  <Upload className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
+                  <Upload className={cn("w-8 h-8 text-primary group-hover:scale-110 transition-transform", isUploading && "animate-bounce")} />
                 </div>
                 <div className="space-y-1">
                   <h3 className="text-lg font-bold">Upload ZIP</h3>
@@ -97,9 +104,7 @@ export function HomePage() {
             <Card className="p-8 border border-border bg-card/40 backdrop-blur-md flex flex-col justify-center">
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-secondary">
-                    <LinkIcon className="w-5 h-5 text-primary" />
-                  </div>
+                  <div className="p-2 rounded-lg bg-secondary"><LinkIcon className="w-5 h-5 text-primary" /></div>
                   <h3 className="text-lg font-bold">Git URL</h3>
                 </div>
                 <div className="flex gap-2">
@@ -108,19 +113,20 @@ export function HomePage() {
                     value={githubUrl}
                     onChange={(e) => setGithubUrl(e.target.value)}
                     className="bg-secondary/30"
+                    disabled={isUploading}
                   />
-                  <Button disabled={!githubUrl} className="shrink-0" onClick={() => toast.info('URL scanning coming soon!')}>
+                  <Button disabled={!githubUrl || isUploading} className="shrink-0" onClick={() => toast.info('URL scanning coming soon!')}>
                     <Search className="w-4 h-4" />
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground text-left">Public GitHub repositories only for Phase 1</p>
+                <p className="text-xs text-muted-foreground text-left">Public GitHub repositories only</p>
               </div>
             </Card>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mt-16 pt-10 border-t border-border/40">
             {features.map((feature, i) => (
-              <motion.div 
-                key={i} 
+              <motion.div
+                key={i}
                 className="flex flex-col items-center sm:items-start text-center sm:text-left gap-3 group"
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -145,9 +151,6 @@ export function HomePage() {
             <p className="text-xs text-muted-foreground max-w-lg mx-auto leading-relaxed">
               Important: Although this project has AI capabilities, there is a limit on the total number of requests that can be made to the AI servers across all user apps in a given time period.
             </p>
-            <div className="mt-4 pt-4 border-t border-border/50 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/40">
-              Powered by Cloudflare Workers & Durable Objects
-            </div>
           </div>
         </footer>
       </div>

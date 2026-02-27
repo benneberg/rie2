@@ -5,13 +5,20 @@ import { ChatHandler } from './chat';
 import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
 import { RIEAnalyzer } from './rie-analyzer';
+import { RIEValidator } from './rie-validator';
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
   initialState: ChatState = {
     messages: [],
     sessionId: crypto.randomUUID(),
     isProcessing: false,
-    model: 'google-ai-studio/gemini-2.0-flash'
+    model: 'google-ai-studio/gemini-2.0-flash',
+    config: {
+      excludePatterns: ['node_modules', '.git', 'dist', 'build'],
+      analysisMode: 'standard',
+      llmAugmentation: true,
+      maxFileSize: 10 * 1024 * 1024
+    }
   };
   async onStart(): Promise<void> {
     this.chatHandler = new ChatHandler(
@@ -30,6 +37,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
       if (method === 'POST' && url.pathname === '/model') return this.handleModelUpdate(await request.json());
       if (method === 'POST' && url.pathname === '/analyze') return this.handleAnalyze(await request.json());
       if (method === 'POST' && url.pathname === '/generate-docs') return this.handleGenerateDocs(await request.json());
+      if (method === 'POST' && url.pathname === '/update-config') return this.handleUpdateConfig(await request.json());
       return Response.json({ success: false, error: API_RESPONSES.NOT_FOUND }, { status: 404 });
     } catch (error) {
       return Response.json({ success: false, error: API_RESPONSES.INTERNAL_ERROR }, { status: 500 });
@@ -37,6 +45,19 @@ export class ChatAgent extends Agent<Env, ChatState> {
   }
   private handleGetMessages(): Response {
     return Response.json({ success: true, data: this.state });
+  }
+  private async handleUpdateConfig(body: { config: any }): Promise<Response> {
+    this.setState({ ...this.state, config: body.config });
+    return Response.json({ success: true, config: this.state.config });
+  }
+  private async handleAnalyze(body: { files: any[], name?: string }): Promise<Response> {
+    // 1. Analyze Core Structure
+    const metadata = await RIEAnalyzer.analyze(body.name || "Repository", body.files, this.state.config);
+    // 2. Run Validation Engine
+    const validation = await RIEValidator.validate(metadata);
+    metadata.validation = validation;
+    this.setState({ ...this.state, metadata });
+    return Response.json({ success: true, metadata });
   }
   private async handleChatMessage(body: { message: string; model?: string; stream?: boolean }): Promise<Response> {
     const { message, model, stream } = body;
@@ -47,13 +68,11 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
     const userMessage = createMessage('user', message.trim());
     this.setState({ ...this.state, messages: [...this.state.messages, userMessage], isProcessing: true });
-    // Construct Context-Aware System Prompt
     const metaContext = this.state.metadata ? 
-      `CONTEXT: You are the ArchLens Repository Specialist. You are currently analyzing the repository "${this.state.metadata.name}".
-       STATS: Primary Language: ${this.state.metadata.primaryLanguage}, Total Files: ${this.state.metadata.totalFiles}, Size: ${(this.state.metadata.totalSize/1024).toFixed(1)}KB.
-       STRUCTURE: The repository has these files (sample): ${this.state.metadata.structure.slice(0, 15).map(f => f.path).join(', ')}.
-       GOAL: Help the user understand architecture, dependencies, and code patterns based on this metadata. If they ask about specifics you don't have, guide them based on standard patterns for ${this.state.metadata.primaryLanguage}.` 
-      : `CONTEXT: You are the ArchLens Repository Specialist. You help users analyze and document code repositories.`;
+      `CONTEXT: ArchLens Repository "${this.state.metadata.name}". Health Score: ${this.state.metadata.validation?.score || 'N/A'}. 
+       PRIMARY LANG: ${this.state.metadata.primaryLanguage}. 
+       STRUCTURE: ${this.state.metadata.structure.slice(0, 15).map(f => f.path).join(', ')}.`
+      : `CONTEXT: ArchLens Assistant.`;
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');
       if (stream) {
@@ -64,8 +83,8 @@ export class ChatAgent extends Agent<Env, ChatState> {
           try {
             this.setState({ ...this.state, streamingMessage: '' });
             const response = await this.chatHandler!.processMessage(
-              `${metaContext}\n\nUSER QUERY: ${message}`, 
-              this.state.messages, 
+              `${metaContext}\n\nUSER QUERY: ${message}`,
+              this.state.messages,
               (chunk) => {
                 this.setState({ ...this.state, streamingMessage: (this.state.streamingMessage || '') + chunk });
                 writer.write(encoder.encode(chunk));
@@ -95,19 +114,9 @@ export class ChatAgent extends Agent<Env, ChatState> {
     this.chatHandler?.updateModel(body.model);
     return Response.json({ success: true, data: this.state });
   }
-  private async handleAnalyze(body: { files: any[], name?: string }): Promise<Response> {
-    const metadata = await RIEAnalyzer.analyze(body.name || "Repository", body.files);
-    this.setState({ ...this.state, metadata });
-    return Response.json({ success: true, metadata });
-  }
   private async handleGenerateDocs(body: { type: string }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false, error: 'No metadata available' }, { status: 400 });
-    const prompt = `Write a professional ${body.type} for a codebase with these properties:
-    Name: ${this.state.metadata.name}
-    Primary Language: ${this.state.metadata.primaryLanguage}
-    Stats: ${this.state.metadata.totalFiles} files, ${(this.state.metadata.totalSize/1024).toFixed(1)}KB
-    Sample Structure: ${JSON.stringify(this.state.metadata.structure.slice(0, 20))}
-    Make it technical, concise, and professional. Use markdown. Focus on high-level architecture and key modules.`;
+    const prompt = `Write a technical ${body.type} for "${this.state.metadata.name}" (${this.state.metadata.primaryLanguage}). Structure: ${JSON.stringify(this.state.metadata.structure.slice(0, 20))}.`;
     try {
       const response = await this.chatHandler!.processMessage(prompt, []);
       const documentation = { ...(this.state.metadata.documentation || {}), [body.type]: response.content };

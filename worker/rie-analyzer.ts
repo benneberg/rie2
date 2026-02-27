@@ -1,19 +1,26 @@
-import { RepositoryMetadata, FileEntry, LanguageDetection, DependencyEdge } from '../src/lib/rie-types';
+import { RepositoryMetadata, FileEntry, LanguageDetection, DependencyEdge, RIEConfig } from '../src/lib/rie-types';
 export class RIEAnalyzer {
-  static async analyze(repoName: string, files: any[]): Promise<RepositoryMetadata> {
-    const totalFiles = files.length;
-    const totalSize = files.reduce((acc, f) => acc + (f.size || 0), 0);
+  static async analyze(repoName: string, files: any[], config?: RIEConfig): Promise<RepositoryMetadata> {
+    const excludeList = config?.excludePatterns || ['node_modules', '.git', 'dist', 'build', '.next'];
+    // Filter files based on exclusion patterns
+    const filteredFiles = files.filter(f => {
+      return !excludeList.some(pattern => f.name.includes(pattern));
+    });
+    const totalFiles = filteredFiles.length;
+    const totalSize = filteredFiles.reduce((acc, f) => acc + (f.size || 0), 0);
     const languageCounts: Record<string, number> = {};
     const dependencies: DependencyEdge[] = [];
-    const structure: FileEntry[] = files.map(f => {
+    const structure: FileEntry[] = filteredFiles.map(f => {
       const ext = f.name.split('.').pop()?.toLowerCase() || 'unknown';
       const lang = this.detectLanguage(ext);
       languageCounts[lang] = (languageCounts[lang] || 0) + 1;
-      // Simulate basic dependency extraction for JS/TS files
-      // In a real implementation with file content, we'd use regex/AST here
+      // Simulate dependency extraction
       if (['ts', 'tsx', 'js', 'jsx'].includes(ext)) {
-        // Randomly simulate some internal relationships for visualization testing
-        const potentialTargets = files.filter(other => other.name !== f.name && other.name.includes('/')).slice(0, 1);
+        const potentialTargets = filteredFiles.filter(other => 
+          other.name !== f.name && 
+          other.name.includes('/') && 
+          ['ts', 'tsx', 'js', 'jsx'].some(e => other.name.endsWith(e))
+        ).slice(0, 1);
         potentialTargets.forEach(target => {
           dependencies.push({
             source: f.name,
@@ -46,6 +53,12 @@ export class RIEAnalyzer {
       languages,
       structure,
       dependencies,
+      config: config || {
+        excludePatterns: excludeList,
+        analysisMode: 'standard',
+        llmAugmentation: true,
+        maxFileSize: 10 * 1024 * 1024
+      },
       analyzedAt: Date.now()
     };
   }

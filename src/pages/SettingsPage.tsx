@@ -1,146 +1,162 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Save, Download, Cpu, Shield, Brain, ListPlus, Trash2 } from 'lucide-react';
+import { Trash2, Save, RefreshCw, Layers, Shield, Zap, Filter } from 'lucide-react';
 import { chatService } from '@/lib/chat';
-import { toast, Toaster } from 'sonner';
-import { Textarea } from '@/components/ui/textarea';
-import { RIEConfig, ProjectDomainType, ProjectPhilosophy, RoadmapItem } from '@/lib/rie-types';
+import { toast } from 'sonner';
 export function SettingsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const sessionId = searchParams.get('session');
-  const [config, setConfig] = useState<RIEConfig>({
+  const [config, setConfig] = useState({
     excludePatterns: ['node_modules', '.git'],
-    analysisMode: 'standard',
+    analysisMode: 'standard' as 'standard' | 'deep',
     llmAugmentation: true,
-    maxFileSize: 10 * 1024 * 1024,
-    aiModel: 'gpt-4o-mini',
-    maxTokens: 4000,
-    maxDepth: 10,
-    temperature: 0.7,
-    outputDir: '.rie',
-    strictValidation: false,
-    projectType: 'auto',
-    includeGlossary: true,
-    includeRoadmap: true,
-    customPhilosophy: {
-      purpose: '',
-      positioning: '',
-      constraints: [],
-      evolution: '',
-      interoperability: ''
-    },
-    targetRoadmap: []
+    maxFileSize: 10
   });
-  const loadConfig = useCallback(async () => {
+  const [newPattern, setNewPattern] = useState('');
+  useEffect(() => {
+    if (!sessionId) {
+      navigate('/');
+      return;
+    }
+    loadConfig();
+  }, [sessionId]);
+  const loadConfig = async () => {
     const response = await chatService.getMessages();
     if (response.success && response.data?.config) {
-      setConfig(response.data.config as RIEConfig);
+      setConfig(response.data.config);
     }
-  }, []);
-  useEffect(() => {
-    if (!sessionId) { navigate('/'); return; }
-    loadConfig();
-  }, [sessionId, loadConfig, navigate]);
+  };
   const handleSave = async () => {
-    if (!sessionId) return;
-    const toastId = toast.loading('SYNCING_v2.0_ENGINE...');
+    const toastId = toast.loading('Persisting configuration...');
     try {
       const response = await fetch(`/api/chat/${sessionId}/update-config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config })
       });
-      if (response.ok) toast.success('v2.0_CONFIG_COMMITTED', { id: toastId });
+      const result = await response.json();
+      if (result.success) {
+        toast.success('Configuration updated!', { id: toastId });
+      }
     } catch (err) {
-      toast.error('SYNC_FAILURE', { id: toastId });
+      toast.error('Failed to update settings', { id: toastId });
     }
   };
-  const updatePhilosophy = (field: keyof ProjectPhilosophy, val: any) => {
-    setConfig({ ...config, customPhilosophy: { ...(config.customPhilosophy || {}), [field]: val } } as RIEConfig);
+  const addPattern = () => {
+    if (newPattern && !config.excludePatterns.includes(newPattern)) {
+      setConfig({ ...config, excludePatterns: [...config.excludePatterns, newPattern] });
+      setNewPattern('');
+    }
+  };
+  const removePattern = (p: string) => {
+    setConfig({ ...config, excludePatterns: config.excludePatterns.filter(item => item !== p) });
   };
   return (
     <AppLayout container>
-      <Toaster richColors position="top-center" theme="dark" />
-      <div className="space-y-12">
-        <header className="flex justify-between items-end">
-          <div>
-            <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-primary/20 text-primary">v2.0_GOVERNANCE</Badge>
-            <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter">Governance</h1>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleSave} className="btn-brutal-amber h-12"><Save className="w-4 h-4 mr-2" /> Commit v2.0</Button>
-          </div>
+      <div className="space-y-8">
+        <header className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight">Session Settings</h1>
+          <p className="text-muted-foreground">Manage analysis parameters and operational behavior for this repository.</p>
         </header>
-        <Tabs defaultValue="intelligence">
-          <TabsList className="grid w-full grid-cols-3 bg-white/5 border border-white/5 h-14">
-            <TabsTrigger value="intelligence" className="text-[10px] font-black uppercase tracking-widest">Domain Intelligence</TabsTrigger>
-            <TabsTrigger value="policy" className="text-[10px] font-black uppercase tracking-widest">Thresholds</TabsTrigger>
-            <TabsTrigger value="roadmap" className="text-[10px] font-black uppercase tracking-widest">Roadmap Override</TabsTrigger>
+        <Tabs defaultValue="patterns" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 bg-secondary/30 mb-8">
+            <TabsTrigger value="patterns" className="flex gap-2"><Filter className="w-4 h-4" /> Scan Patterns</TabsTrigger>
+            <TabsTrigger value="analysis" className="flex gap-2"><Layers className="w-4 h-4" /> Analysis Mode</TabsTrigger>
+            <TabsTrigger value="safety" className="flex gap-2"><Shield className="w-4 h-4" /> Safety & Safety</TabsTrigger>
           </TabsList>
-          <TabsContent value="intelligence" className="space-y-8 mt-8">
-            <Card className="glass border-l-4 border-l-cyan-500">
-              <CardHeader><CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><Brain className="w-4 h-4" /> Philosophy Definition</CardTitle></CardHeader>
+          <TabsContent value="patterns">
+            <Card className="bg-card/40 backdrop-blur-md border-border">
+              <CardHeader>
+                <CardTitle>Exclusion Patterns</CardTitle>
+                <CardDescription>Files matching these patterns will be ignored during RIE analysis.</CardDescription>
+              </CardHeader>
               <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold opacity-50">Project Purpose</Label>
-                  <Input value={config.customPhilosophy?.purpose} onChange={(e) => updatePhilosophy('purpose', e.target.value)} placeholder="Mission statement..." className="bg-black/40 border-white/10" />
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="e.g. dist, .next, *.log" 
+                    value={newPattern} 
+                    onChange={(e) => setNewPattern(e.target.value)} 
+                    onKeyDown={(e) => e.key === 'Enter' && addPattern()}
+                  />
+                  <Button onClick={addPattern} size="sm">Add</Button>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-bold opacity-50">Evolution Strategy</Label>
-                    <Input value={config.customPhilosophy?.evolution} onChange={(e) => updatePhilosophy('evolution', e.target.value)} className="bg-black/40 border-white/10" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-bold opacity-50">Interoperability</Label>
-                    <Input value={config.customPhilosophy?.interoperability} onChange={(e) => updatePhilosophy('interoperability', e.target.value)} className="bg-black/40 border-white/10" />
-                  </div>
+                <div className="flex flex-wrap gap-2">
+                  {config.excludePatterns.map(p => (
+                    <Badge key={p} variant="secondary" className="pl-3 pr-1 py-1 flex items-center gap-2">
+                      {p}
+                      <button onClick={() => removePattern(p)} className="hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                    </Badge>
+                  ))}
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
-          <TabsContent value="roadmap" className="mt-8">
-            <Card className="glass border-l-4 border-l-purple-500">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><ListPlus className="w-4 h-4" /> Target Roadmap</CardTitle>
-                <Button size="sm" variant="outline" className="text-[8px] font-bold h-7" onClick={() => setConfig({...config, targetRoadmap: [...(config.targetRoadmap || []), { version: 'v1.1', status: 'planned', features: [] }]})}>
-                  Add Entry
-                </Button>
+          <TabsContent value="analysis">
+            <Card className="bg-card/40 backdrop-blur-md border-border">
+              <CardHeader>
+                <CardTitle>Scan Depth</CardTitle>
+                <CardDescription>Determine how deep the RIE engine should traverse the file graph.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {config.targetRoadmap?.map((item, i) => (
-                  <div key={i} className="p-4 bg-white/5 border border-white/10 rounded-lg grid grid-cols-4 gap-4 items-end">
-                    <div className="space-y-2">
-                      <Label className="text-[8px] uppercase opacity-40">Ver</Label>
-                      <Input value={item.version} className="bg-black/40 h-8" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-[8px] uppercase opacity-40">Status</Label>
-                      <Select value={item.status}>
-                        <SelectTrigger className="bg-black/40 h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent className="bg-midnight"><SelectItem value="current">Current</SelectItem><SelectItem value="queued">Queued</SelectItem><SelectItem value="planned">Planned</SelectItem></SelectContent>
-                      </Select>
-                    </div>
-                    <div className="col-span-2 flex gap-2">
-                      <Button variant="ghost" className="text-red-500 h-8" onClick={() => {
-                        const next = [...(config.targetRoadmap || [])]; next.splice(i, 1); setConfig({...config, targetRoadmap: next});
-                      }}><Trash2 className="w-4 h-4" /></Button>
-                    </div>
+                <div className="flex items-center justify-between p-4 rounded-xl border border-border/40 bg-secondary/20">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-bold">Deep Analysis Mode</Label>
+                    <p className="text-xs text-muted-foreground">Increases CPU usage to resolve complex class inheritance.</p>
                   </div>
-                ))}
+                  <Switch 
+                    checked={config.analysisMode === 'deep'} 
+                    onCheckedChange={(checked) => setConfig({...config, analysisMode: checked ? 'deep' : 'standard'})} 
+                  />
+                </div>
+                <div className="flex items-center justify-between p-4 rounded-xl border border-border/40 bg-secondary/20">
+                  <div className="space-y-0.5">
+                    <Label className="text-base font-bold">AI Context Augmentation</Label>
+                    <p className="text-xs text-muted-foreground">Injects repo structure into every chat prompt.</p>
+                  </div>
+                  <Switch 
+                    checked={config.llmAugmentation} 
+                    onCheckedChange={(checked) => setConfig({...config, llmAugmentation: checked})} 
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="safety">
+            <Card className="bg-card/40 backdrop-blur-md border-border">
+              <CardHeader>
+                <CardTitle>Resource Guardrails</CardTitle>
+                <CardDescription>Limit analysis intensity to stay within Worker limits.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                   <Label>Max File Size (MB)</Label>
+                   <Input 
+                     type="number" 
+                     value={config.maxFileSize} 
+                     onChange={(e) => setConfig({...config, maxFileSize: parseInt(e.target.value)})} 
+                   />
+                   <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Recommended: 10-25MB</p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
+        <div className="flex justify-between items-center pt-8 border-t">
+           <Button variant="outline" onClick={() => navigate(-1)}>Discard Changes</Button>
+           <div className="flex gap-2">
+             <Button variant="secondary" onClick={() => toast.info('Re-scan triggered')}><RefreshCw className="w-4 h-4 mr-2" /> Re-scan Now</Button>
+             <Button className="bg-primary shadow-soft px-8" onClick={handleSave}><Save className="w-4 h-4 mr-2" /> Save Config</Button>
+           </div>
+        </div>
       </div>
     </AppLayout>
   );
