@@ -1,18 +1,18 @@
-/*
-Wraps children in a sidebar layout. Don't use this if you don't need a sidebar
-*/
 import React from "react";
+import { useSearchParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-
+import { ChatWidget } from "@/components/rie/ChatWidget";
 type AppLayoutProps = {
   children: React.ReactNode;
   container?: boolean;
   className?: string;
   contentClassName?: string;
 };
-
 export function AppLayout({ children, container = false, className, contentClassName }: AppLayoutProps): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const sessionId = searchParams.get('session');
   return (
     <SidebarProvider defaultOpen={false}>
       <AppSidebar />
@@ -20,11 +20,25 @@ export function AppLayout({ children, container = false, className, contentClass
         <div className="absolute left-2 top-2 z-20">
           <SidebarTrigger />
         </div>
-        {container ? (
-          <div className={"max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12" + (contentClassName ? ` ${contentClassName}` : "")}>{children}</div>
-        ) : (
-          children
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname + (sessionId || '')}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="h-full"
+          >
+            {container ? (
+              <div className={"max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12" + (contentClassName ? ` ${contentClassName}` : "")}>
+                {children}
+              </div>
+            ) : (
+              children
+            )}
+          </motion.div>
+        </AnimatePresence>
+        {sessionId && <ChatWidget />}
       </SidebarInset>
     </SidebarProvider>
   );

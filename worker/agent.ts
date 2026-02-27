@@ -11,7 +11,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     messages: [],
     sessionId: crypto.randomUUID(),
     isProcessing: false,
-    model: 'google-ai-studio/gemini-2.5-flash'
+    model: 'google-ai-studio/gemini-2.0-flash'
   };
   async onStart(): Promise<void> {
     this.chatHandler = new ChatHandler(
@@ -47,6 +47,13 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
     const userMessage = createMessage('user', message.trim());
     this.setState({ ...this.state, messages: [...this.state.messages, userMessage], isProcessing: true });
+    // Construct Context-Aware System Prompt
+    const metaContext = this.state.metadata ? 
+      `CONTEXT: You are the ArchLens Repository Specialist. You are currently analyzing the repository "${this.state.metadata.name}".
+       STATS: Primary Language: ${this.state.metadata.primaryLanguage}, Total Files: ${this.state.metadata.totalFiles}, Size: ${(this.state.metadata.totalSize/1024).toFixed(1)}KB.
+       STRUCTURE: The repository has these files (sample): ${this.state.metadata.structure.slice(0, 15).map(f => f.path).join(', ')}.
+       GOAL: Help the user understand architecture, dependencies, and code patterns based on this metadata. If they ask about specifics you don't have, guide them based on standard patterns for ${this.state.metadata.primaryLanguage}.` 
+      : `CONTEXT: You are the ArchLens Repository Specialist. You help users analyze and document code repositories.`;
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');
       if (stream) {
@@ -56,17 +63,21 @@ export class ChatAgent extends Agent<Env, ChatState> {
         (async () => {
           try {
             this.setState({ ...this.state, streamingMessage: '' });
-            const response = await this.chatHandler!.processMessage(message, this.state.messages, (chunk) => {
-              this.setState({ ...this.state, streamingMessage: (this.state.streamingMessage || '') + chunk });
-              writer.write(encoder.encode(chunk));
-            });
+            const response = await this.chatHandler!.processMessage(
+              `${metaContext}\n\nUSER QUERY: ${message}`, 
+              this.state.messages, 
+              (chunk) => {
+                this.setState({ ...this.state, streamingMessage: (this.state.streamingMessage || '') + chunk });
+                writer.write(encoder.encode(chunk));
+              }
+            );
             const assistantMessage = createMessage('assistant', response.content, response.toolCalls);
             this.setState({ ...this.state, messages: [...this.state.messages, assistantMessage], isProcessing: false, streamingMessage: '' });
           } finally { writer.close(); }
         })();
         return createStreamResponse(readable);
       }
-      const response = await this.chatHandler.processMessage(message, this.state.messages);
+      const response = await this.chatHandler.processMessage(`${metaContext}\n\nUSER QUERY: ${message}`, this.state.messages);
       const assistantMessage = createMessage('assistant', response.content, response.toolCalls);
       this.setState({ ...this.state, messages: [...this.state.messages, assistantMessage], isProcessing: false });
       return Response.json({ success: true, data: this.state });
@@ -94,8 +105,9 @@ export class ChatAgent extends Agent<Env, ChatState> {
     const prompt = `Write a professional ${body.type} for a codebase with these properties:
     Name: ${this.state.metadata.name}
     Primary Language: ${this.state.metadata.primaryLanguage}
-    Structure: ${JSON.stringify(this.state.metadata.structure.slice(0, 10))}
-    Make it technical, concise, and professional. Use markdown.`;
+    Stats: ${this.state.metadata.totalFiles} files, ${(this.state.metadata.totalSize/1024).toFixed(1)}KB
+    Sample Structure: ${JSON.stringify(this.state.metadata.structure.slice(0, 20))}
+    Make it technical, concise, and professional. Use markdown. Focus on high-level architecture and key modules.`;
     try {
       const response = await this.chatHandler!.processMessage(prompt, []);
       const documentation = { ...(this.state.metadata.documentation || {}), [body.type]: response.content };

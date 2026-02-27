@@ -1,14 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, Link as LinkIcon, Sparkles, ArrowRight, Shield, Zap, Search } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Upload, Link as LinkIcon, Sparkles, ArrowRight, Shield, Zap, Search, Fingerprint, Map, Cpu } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Toaster, toast } from 'sonner';
-import { chatService } from '@/lib/chat';
+import { cn } from '@/lib/utils';
 export function HomePage() {
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
@@ -19,20 +19,19 @@ export function HomePage() {
     const toastId = toast.loading('Reading repository contents...');
     try {
       const sessionId = crypto.randomUUID();
-      // In a real implementation, we'd use JSZip to read the files
-      // For Phase 1, we simulate the flow
-      toast.info('Analyzing structure...', { id: toastId });
+      toast.info('Synthesizing metadata...', { id: toastId });
       const response = await fetch(`/api/analyze/${sessionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          files: acceptedFiles.map(f => ({ name: f.name, size: f.size, type: f.type })) 
+        body: JSON.stringify({
+          name: acceptedFiles[0]?.name.split('.')[0] || "Repo",
+          files: acceptedFiles.map(f => ({ name: f.name, size: f.size, type: 'file' }))
         }),
       });
       const result = await response.json();
       if (result.success) {
         toast.success('Analysis complete!', { id: toastId });
-        navigate(`/?session=${sessionId}`);
+        navigate(`/dashboard?session=${sessionId}`);
       } else {
         throw new Error(result.error);
       }
@@ -47,20 +46,25 @@ export function HomePage() {
     accept: { 'application/zip': ['.zip'] },
     multiple: false
   });
+  const features = [
+    { icon: Fingerprint, title: "Deep Scan", desc: "Binary-level structural analysis" },
+    { icon: Map, title: "Graph Viz", desc: "Interactive dependency mapping" },
+    { icon: Cpu, title: "AI Docs", desc: "Context-aware artifact generation" }
+  ];
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 bg-background selection:bg-primary/20">
       <div className="py-8 md:py-10 lg:py-12 min-h-screen flex flex-col justify-center items-center relative overflow-hidden">
         <ThemeToggle />
         <div className="absolute inset-0 bg-gradient-mesh opacity-5 dark:opacity-10 pointer-events-none" />
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
           className="text-center space-y-8 z-10 w-full max-w-4xl"
         >
           <div className="flex justify-center mb-6">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-primary flex items-center justify-center shadow-glow-lg floating">
-              <Sparkles className="w-10 h-10 text-white rotating" />
+            <div className="w-20 h-20 rounded-3xl bg-primary flex items-center justify-center shadow-glow-lg floating group">
+              <Sparkles className="w-10 h-10 text-primary-foreground group-hover:rotate-12 transition-transform" />
             </div>
           </div>
           <div className="space-y-4">
@@ -72,72 +76,82 @@ export function HomePage() {
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
-            <Card 
+            <Card
               {...getRootProps()}
               className={cn(
-                "p-8 border-2 border-dashed transition-all cursor-pointer group hover:border-primary/50 bg-card/50 backdrop-blur-sm",
-                isDragActive ? "border-primary bg-primary/5" : "border-border"
+                "p-8 border-2 border-dashed transition-all cursor-pointer group bg-card/40 backdrop-blur-md relative overflow-hidden",
+                isDragActive ? "border-primary bg-primary/5 ring-4 ring-primary/10" : "border-border hover:border-primary/50"
               )}
             >
               <input {...getInputProps()} />
               <div className="flex flex-col items-center gap-4">
                 <div className="p-4 rounded-full bg-secondary group-hover:bg-primary/10 transition-colors">
-                  <Upload className="w-8 h-8 text-primary" />
+                  <Upload className="w-8 h-8 text-primary group-hover:scale-110 transition-transform" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-lg font-semibold">Upload ZIP</h3>
+                  <h3 className="text-lg font-bold">Upload ZIP</h3>
                   <p className="text-sm text-muted-foreground">Drag & drop your repository archive</p>
                 </div>
               </div>
             </Card>
-            <Card className="p-8 border border-border bg-card/50 backdrop-blur-sm flex flex-col justify-center">
+            <Card className="p-8 border border-border bg-card/40 backdrop-blur-md flex flex-col justify-center">
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-secondary">
                     <LinkIcon className="w-5 h-5 text-primary" />
                   </div>
-                  <h3 className="text-lg font-semibold">Git URL</h3>
+                  <h3 className="text-lg font-bold">Git URL</h3>
                 </div>
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="https://github.com/user/repo" 
+                  <Input
+                    placeholder="https://github.com/user/repo"
                     value={githubUrl}
                     onChange={(e) => setGithubUrl(e.target.value)}
-                    className="bg-secondary/50"
+                    className="bg-secondary/30"
                   />
-                  <Button disabled={!githubUrl}>
+                  <Button disabled={!githubUrl} className="shrink-0" onClick={() => toast.info('URL scanning coming soon!')}>
                     <Search className="w-4 h-4" />
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Public repositories only for now</p>
+                <p className="text-xs text-muted-foreground text-left">Public GitHub repositories only for Phase 1</p>
               </div>
             </Card>
           </div>
-          <div className="flex flex-wrap justify-center gap-8 mt-16 pt-8 border-t border-border/50">
-            {[
-              { icon: Zap, label: "Instant Analysis", desc: "RIE Engine v1.0" },
-              { icon: Shield, label: "Private & Secure", desc: "In-memory processing" },
-              { icon: ArrowRight, label: "Interactive Docs", desc: "Auto-generated" }
-            ].map((feature, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <feature.icon className="w-5 h-5 text-primary" />
-                <div className="text-left">
-                  <p className="text-sm font-semibold">{feature.label}</p>
-                  <p className="text-xs text-muted-foreground">{feature.desc}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mt-16 pt-10 border-t border-border/40">
+            {features.map((feature, i) => (
+              <motion.div 
+                key={i} 
+                className="flex flex-col items-center sm:items-start text-center sm:text-left gap-3 group"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.1 * i }}
+              >
+                <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10 group-hover:bg-primary/10 transition-colors">
+                   <feature.icon className="w-6 h-6 text-primary" />
                 </div>
-              </div>
+                <div>
+                  <p className="text-sm font-bold tracking-tight">{feature.title}</p>
+                  <p className="text-xs text-muted-foreground font-medium">{feature.desc}</p>
+                </div>
+              </motion.div>
             ))}
           </div>
         </motion.div>
-        <footer className="mt-20 text-sm text-muted-foreground text-center">
-          <p>Important Note: There is a limit on AI requests across all user apps in a given time period.</p>
-          <p className="mt-2">Powered by Cloudflare Workers & Durable Objects</p>
+        <footer className="mt-20 w-full max-w-3xl">
+          <div className="bg-secondary/50 border border-border rounded-2xl p-6 text-center">
+            <p className="text-sm font-semibold flex items-center justify-center gap-2 mb-2">
+               <Zap className="w-4 h-4 text-amber-500" /> Usage Policy
+            </p>
+            <p className="text-xs text-muted-foreground max-w-lg mx-auto leading-relaxed">
+              Important: Although this project has AI capabilities, there is a limit on the total number of requests that can be made to the AI servers across all user apps in a given time period.
+            </p>
+            <div className="mt-4 pt-4 border-t border-border/50 text-[10px] uppercase tracking-widest font-bold text-muted-foreground/40">
+              Powered by Cloudflare Workers & Durable Objects
+            </div>
+          </div>
         </footer>
       </div>
-      <Toaster richColors position="bottom-right" />
+      <Toaster richColors position="top-center" />
     </div>
   );
-}
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
 }
