@@ -40,6 +40,12 @@ export interface RIEConfig {
   llmAugmentation: boolean;
   maxFileSize: number;
 }
+export interface RepositorySource {
+  type: 'upload' | 'github';
+  url?: string;
+  repo?: string;
+  ref?: string;
+}
 export interface RepositoryMetadata {
   name: string;
   totalFiles: number;
@@ -51,6 +57,7 @@ export interface RepositoryMetadata {
   documentation?: Record<string, string>;
   validation?: ValidationReport;
   config?: RIEConfig;
+  source?: RepositorySource;
   analyzedAt: number;
 }
 export interface ScanResult {

@@ -4,11 +4,11 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/rie/StatsCard';
 import { DependencyGraph } from '@/components/rie/DependencyGraph';
 import { RepositoryMetadata } from '@/lib/rie-types';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Files, Code2, Database, Activity, Sparkles, BookOpen, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Files, Code2, Database, Sparkles, AlertTriangle, Github, HardDrive } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { cn } from '@/lib/utils';
 export function DashboardPage() {
@@ -40,12 +40,24 @@ export function DashboardPage() {
   if (isLoading) return <AppLayout container><Skeleton className="h-[600px] w-full glass animate-pulse" /></AppLayout>;
   if (!metadata) return <AppLayout container><div className="text-center py-20 font-display text-4xl uppercase opacity-20">No active session</div></AppLayout>;
   const healthScore = metadata.validation?.score || 0;
+  const source = metadata.source;
   return (
     <AppLayout container>
       <div className="space-y-12">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 animate-reveal">
-          <div className="space-y-2">
-            <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-[#f59e0b]/30 text-[#f59e0b] animate-reveal">LIVE_SCAN_REPORT</Badge>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-[#f59e0b]/30 text-[#f59e0b]">LIVE_SCAN_REPORT</Badge>
+              {source?.type === 'github' ? (
+                <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-cyan-500/30 text-cyan-400 flex gap-1.5 items-center">
+                  <Github className="w-3 h-3" /> GITHUB: {source.repo?.toUpperCase()}
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-white/20 text-white/50 flex gap-1.5 items-center">
+                  <HardDrive className="w-3 h-3" /> LOCAL_ARCHIVE
+                </Badge>
+              )}
+            </div>
             <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-none">{metadata.name}</h1>
           </div>
           <div className="flex gap-4">

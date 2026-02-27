@@ -1,4 +1,5 @@
 import { Agent } from 'agents';
+import JSZip from 'jszip';
 import type { Env } from './core-utils';
 import type { ChatState } from './types';
 import { ChatHandler } from './chat';
@@ -6,6 +7,7 @@ import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
 import { RIEAnalyzer } from './rie-analyzer';
 import { RIEValidator } from './rie-validator';
+import { RepositorySource } from '../src/lib/rie-types';
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
   initialState: ChatState = {
@@ -64,19 +66,48 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private async handleAnalyze(body: { files?: any[], url?: string, name?: string }): Promise<Response> {
     const repoName = body.name || "Repository";
     let analysisFiles = body.files || [];
-    if (body.url && analysisFiles.length === 0) {
-      analysisFiles = [
-        { name: 'README.md', size: 1024, type: 'file' },
-        { name: 'package.json', size: 512, type: 'file' },
-        { name: 'src/index.ts', size: 2048, type: 'file' },
-        { name: 'src/App.tsx', size: 4096, type: 'file' },
-        { name: 'src/components/Button.tsx', size: 512, type: 'file' },
-        { name: 'src/lib/utils.ts', size: 1024, type: 'file' }
-      ];
+    let source: RepositorySource = { type: 'upload' };
+    if (body.url) {
+      const githubMatch = body.url.match(/github\.com\/([^/]+)\/([^/]+)/);
+      if (githubMatch) {
+        const owner = githubMatch[1];
+        const repo = githubMatch[2].replace(/\.git$/, '');
+        const zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/main`;
+        try {
+          const res = await fetch(zipUrl, {
+            headers: { 'User-Agent': 'ArchLens-Ingestion-Agent' }
+          });
+          if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+          const arrayBuffer = await res.arrayBuffer();
+          const zip = await JSZip.loadAsync(arrayBuffer);
+          const filesInZip: any[] = [];
+          for (const [path, file] of Object.entries(zip.files)) {
+            if (file.dir) continue;
+            // GitHub zips have a root folder like "owner-repo-hash/", we strip it
+            const normalizedPath = path.split('/').slice(1).join('/');
+            if (!normalizedPath) continue;
+            filesInZip.push({
+              name: normalizedPath,
+              size: (file as any)._data?.uncompressedSize || 0,
+              type: 'file'
+            });
+          }
+          analysisFiles = filesInZip;
+          source = { 
+            type: 'github', 
+            url: body.url, 
+            repo: `${owner}/${repo}`,
+            ref: 'main'
+          };
+        } catch (e) {
+          return Response.json({ success: false, error: `Git Ingestion Failed: ${e instanceof Error ? e.message : 'Unknown'}` }, { status: 500 });
+        }
+      }
     }
     const metadata = await RIEAnalyzer.analyze(repoName, analysisFiles, this.state.config);
     const validation = await RIEValidator.validate(metadata);
     metadata.validation = validation;
+    metadata.source = source;
     if (!metadata.documentation) metadata.documentation = {};
     try {
       if (this.chatHandler) {
@@ -101,10 +132,10 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
     const userMessage = createMessage('user', message.trim());
     this.setState({ ...this.state, messages: [...this.state.messages, userMessage], isProcessing: true });
-    const metaContext = this.state.metadata ?
-      `CONTEXT: ArchLens Repository "${this.state.metadata.name}". Health: ${this.state.metadata.validation?.score}/100.
-       LANG: ${this.state.metadata.primaryLanguage}. FILES: ${this.state.metadata.totalFiles}.
-       MAP: ${this.state.metadata.structure.slice(0, 30).map(f => f.path).join(', ')}.`
+    const metaContext = this.state.metadata ? 
+      `CONTEXT: ArchLens Repository "${this.state.metadata.name}". Health: ${this.state.metadata.validation?.score}/100. 
+       LANG: ${this.state.metadata.primaryLanguage}. FILES: ${this.state.metadata.totalFiles}. SOURCE: ${this.state.metadata.source?.type}.
+       MAP: ${this.state.metadata.structure.slice(0, 30).map(f => f.path).join(', ')}.` 
       : `CONTEXT: ArchLens Assistant. No active repository context.`;
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');

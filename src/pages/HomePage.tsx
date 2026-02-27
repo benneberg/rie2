@@ -1,13 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Upload, Link as LinkIcon, Sparkles, Search, Loader2, ArrowRight, Zap, Globe, Cpu, Fingerprint } from 'lucide-react';
+import { Upload, Link as LinkIcon, Sparkles, Search, Loader2, ArrowRight, Zap, Globe, Cpu, Fingerprint, Github } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast, Toaster } from 'sonner';
 import { chatService } from '@/lib/chat';
-import { cn } from '@/lib/utils';
+import { cn, parseGitHubUrl } from '@/lib/utils';
 import { OrbitalBackground } from '@/components/OrbitalBackground';
 export function HomePage() {
   const navigate = useNavigate();
@@ -45,13 +45,50 @@ export function HomePage() {
     accept: { 'application/zip': ['.zip'] },
     multiple: false
   });
+  const handleGithubClone = async () => {
+    if (!githubUrl || isFetchingUrl) return;
+    const parsed = parseGitHubUrl(githubUrl);
+    if (!parsed) {
+      toast.error('INVALID_GITHUB_URL', { description: 'Please provide a valid https://github.com/user/repo URL' });
+      return;
+    }
+    setIsFetchingUrl(true);
+    const toastId = toast.loading('INITIATING_REMOTE_CLONE...');
+    try {
+      const sessionId = crypto.randomUUID();
+      const name = parsed.repo;
+      const response = await fetch(`/api/analyze/${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: githubUrl,
+          name: name
+        }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        await chatService.createSession(name, sessionId);
+        toast.success('REMOTE_ANALYSIS_COMPLETE', { id: toastId });
+        navigate(`/dashboard?session=${sessionId}`);
+      } else {
+        throw new Error(result.error || 'ANALYSIS_FAILED');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('CLONE_FAILURE', { 
+        id: toastId, 
+        description: error instanceof Error ? error.message : 'Ensure the repository is public and valid.' 
+      });
+    } finally {
+      setIsFetchingUrl(false);
+    }
+  };
   return (
     <div className="min-h-screen selection:bg-[#f59e0b] selection:text-[#070911]">
       <OrbitalBackground />
       <Toaster richColors position="top-center" theme="dark" />
       <div className="max-w-7xl mx-auto px-6 py-20 lg:py-32 flex flex-col items-center text-center">
-        {/* Brutalist Logo Chip */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="mb-12 relative group"
@@ -63,8 +100,7 @@ export function HomePage() {
             RC_4.0.1
           </div>
         </motion.div>
-        {/* Hero Tagline */}
-        <motion.h1 
+        <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
@@ -72,7 +108,7 @@ export function HomePage() {
         >
           Visual <span className="text-[#f59e0b]">Intelligence</span> for Dirty Code.
         </motion.h1>
-        <motion.p 
+        <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
@@ -80,12 +116,11 @@ export function HomePage() {
         >
           X-ray your repository. Map dependencies in high-definition. Generate documentation that doesn't suck. All in seconds.
         </motion.p>
-        {/* Action Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl mb-24">
-          <div 
+          <div
             {...getRootProps()}
             className={cn(
-              "p-12 glass border-2 border-dashed transition-all group flex flex-col items-center justify-center min-h-[300px]",
+              "p-12 glass border-2 border-dashed transition-all group flex flex-col items-center justify-center min-h-[300px] cursor-pointer",
               isDragActive ? "border-[#f59e0b] bg-[#f59e0b]/5" : "border-white/10 hover:border-[#f59e0b]/50"
             )}
           >
@@ -96,26 +131,30 @@ export function HomePage() {
           </div>
           <div className="p-12 glass border border-white/10 flex flex-col justify-center min-h-[300px]">
             <div className="flex items-center gap-3 mb-8">
-              <Globe className="w-6 h-6 text-[#f59e0b]" />
+              <Github className="w-6 h-6 text-[#f59e0b]" />
               <h3 className="text-xl font-display font-bold uppercase">Clone Repo</h3>
             </div>
             <div className="space-y-4">
-              <Input 
-                placeholder="HTTPS://GITHUB.COM/..." 
+              <Input
+                placeholder="HTTPS://GITHUB.COM/USER/REPO"
                 className="bg-black/40 border-white/10 text-xs font-mono py-6 tracking-widest"
                 value={githubUrl}
                 onChange={(e) => setGithubUrl(e.target.value)}
               />
-              <Button 
-                onClick={() => toast.info('REMOTE_CLONE_WIP')}
+              <Button
+                onClick={handleGithubClone}
+                disabled={isFetchingUrl}
                 className="w-full btn-brutal-amber h-14"
               >
-                Execute Analysis <ArrowRight className="ml-2 w-4 h-4" />
+                {isFetchingUrl ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <>Execute Analysis <ArrowRight className="ml-2 w-4 h-4" /></>
+                )}
               </Button>
             </div>
           </div>
         </div>
-        {/* Stats Bar */}
         <div className="grid grid-cols-3 gap-12 w-full max-w-4xl py-12 border-y border-white/5 mb-24">
           <div className="flex flex-col items-center">
             <span className="text-4xl md:text-6xl font-stats text-[#f59e0b]">3s</span>
@@ -130,7 +169,6 @@ export function HomePage() {
             <span className="text-[10px] font-bold uppercase tracking-widest opacity-40">Structural Truth</span>
           </div>
         </div>
-        {/* Features Preview */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
           {[
             { icon: Fingerprint, title: "Deterministic Scan", desc: "No fuzzy logic. Exact architectural extraction." },
@@ -146,8 +184,8 @@ export function HomePage() {
             </div>
           ))}
         </div>
-        <footer className="mt-40 opacity-30 text-[10px] font-mono uppercase tracking-[0.3em]">
-          ArchLens Terminal • Established 2024 • Build_System_V4
+        <footer className="mt-40 opacity-30 text-[10px] font-mono uppercase tracking-[0.3em] pb-10">
+          ArchLens Terminal • Established 2024 • Build_System_V4 • Note: AI usage limits apply.
         </footer>
       </div>
     </div>
