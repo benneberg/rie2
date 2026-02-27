@@ -22,7 +22,11 @@ export class ChatAgent extends Agent<Env, ChatState> {
       llmAugmentation: true,
       maxFileSize: 10 * 1024 * 1024,
       aiModel: 'gpt-4o-mini',
-      maxTokens: 4000
+      maxTokens: 4000,
+      maxDepth: 10,
+      temperature: 0.7,
+      outputDir: '.rie',
+      strictValidation: false
     }
   };
   async onStart(): Promise<void> {
@@ -36,15 +40,17 @@ export class ChatAgent extends Agent<Env, ChatState> {
     try {
       const url = new URL(request.url);
       const method = request.method;
-      if (method === 'GET' && url.pathname === '/messages') return this.handleGetMessages();
-      if (method === 'POST' && url.pathname === '/chat') return this.handleChatMessage(await request.json());
-      if (method === 'DELETE' && url.pathname === '/clear') return this.handleClearMessages();
-      if (method === 'POST' && url.pathname === '/model') return this.handleModelUpdate(await request.json());
-      if (method === 'POST' && url.pathname === '/analyze') return this.handleAnalyze(await request.json());
-      if (method === 'POST' && url.pathname === '/generate-docs') return this.handleGenerateDocs(await request.json());
-      if (method === 'POST' && url.pathname === '/save-docs') return this.handleSaveDocs(await request.json());
-      if (method === 'POST' && url.pathname === '/update-config') return this.handleUpdateConfig(await request.json());
-      if (method === 'GET' && url.pathname === '/llm-context') return this.handleGetLLMContext();
+      const path = url.pathname;
+      if (method === 'GET' && path === '/messages') return this.handleGetMessages();
+      if (method === 'POST' && path === '/chat') return this.handleChatMessage(await request.json());
+      if (method === 'DELETE' && path === '/clear') return this.handleClearMessages();
+      if (method === 'POST' && path === '/model') return this.handleModelUpdate(await request.json());
+      if (method === 'POST' && path === '/analyze') return this.handleAnalyze(await request.json());
+      if (method === 'POST' && path === '/generate-docs') return this.handleGenerateDocs(await request.json());
+      if (method === 'POST' && path === '/save-docs') return this.handleSaveDocs(await request.json());
+      if (method === 'POST' && path === '/update-config') return this.handleUpdateConfig(await request.json());
+      if (method === 'GET' && path === '/llm-context') return this.handleGetLLMContext();
+      if (method === 'POST' && path === '/export-report') return this.handleExportReport();
       return Response.json({ success: false, error: API_RESPONSES.NOT_FOUND }, { status: 404 });
     } catch (error) {
       console.error('Agent Request Error:', error);
@@ -58,8 +64,12 @@ export class ChatAgent extends Agent<Env, ChatState> {
     if (!body.config || typeof body.config !== 'object') {
       return Response.json({ success: false, error: 'INVALID_CONFIG_FORMAT' }, { status: 400 });
     }
-    this.setState({ ...this.state, config: body.config });
+    this.setState({ ...this.state, config: { ...this.state.config, ...body.config } });
     return Response.json({ success: true, config: this.state.config });
+  }
+  private async handleExportReport(): Promise<Response> {
+    if (!this.state.metadata) return Response.json({ success: false, error: 'No data to export' }, { status: 400 });
+    return Response.json({ success: true, metadata: this.state.metadata });
   }
   private async handleGetLLMContext(): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false, error: 'Metadata empty' }, { status: 400 });
@@ -99,7 +109,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
           const res = await fetch(zipUrl, { headers: { 'User-Agent': 'ArchLens-Agent' } });
           if (!res.ok) throw new Error(`GitHub Fetch Failed: ${res.statusText}`);
           const zip = await JSZip.loadAsync(await res.arrayBuffer());
-          // Remove the GitHub-added root folder prefix (usually owner-repo-hash/)
           analysisFiles = Object.entries(zip.files)
             .filter(([_, f]) => !f.dir)
             .map(([path, f]) => ({
@@ -107,7 +116,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
               size: (f as any)._data?.uncompressedSize || 0,
               type: 'file'
             }))
-            .filter(f => f.name); // Filter out empty paths
+            .filter(f => f.name);
         } catch (e) {
           return Response.json({ success: false, error: `Git Load Failed: ${e}` }, { status: 500 });
         }
@@ -118,7 +127,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     metadata.source = source;
     metadata.status = 'completed';
     if (this.chatHandler) {
-      const summaryPrompt = `Perform an architectural summary for project "${repoName}". Health: ${metadata.validation.score}%. Provide a 1-sentence technical profile based on its ${metadata.totalFiles} files and ${metadata.primaryLanguage} stack.`;
+      const summaryPrompt = `Perform an architectural summary for project "${repoName}". Health: ${metadata.validation.score}%. Files: ${metadata.totalFiles}. Strategy: ${metadata.isMonorepo ? 'Monorepo' : 'Monolith'}. Highlight core tech debt based on risk heatmap.`;
       try {
         const summary = await this.chatHandler.processMessage(summaryPrompt, []);
         if (!metadata.documentation) metadata.documentation = {};
@@ -139,7 +148,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     const userMessage = createMessage('user', message.trim());
     this.setState({ ...this.state, messages: [...this.state.messages, userMessage], isProcessing: true });
     const metaContext = this.state.metadata ? 
-      `CONTEXT: ArchLens Scan for "${this.state.metadata.name}". Health Score: ${this.state.metadata.validation?.score}/100. Structure: ${this.state.metadata.isMonorepo ? 'Monorepo' : 'Monolith'}. Source: ${this.state.metadata.source?.type}.`
+      `CONTEXT: ArchLens Scan for "${this.state.metadata.name}". Health Score: ${this.state.metadata.validation?.score}/100. Structure: ${this.state.metadata.isMonorepo ? 'Monorepo' : 'Monolith'}.` 
       : `CONTEXT: General ArchLens Assistant.`;
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');

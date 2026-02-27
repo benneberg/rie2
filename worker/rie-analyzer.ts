@@ -1,7 +1,8 @@
 import { RepositoryMetadata, FileEntry, LanguageDetection, DependencyEdge, RIEConfig } from '../src/lib/rie-types';
 export class RIEAnalyzer {
   static async analyze(repoName: string, files: any[], config?: RIEConfig): Promise<RepositoryMetadata> {
-    const excludeList = config?.excludePatterns || ['node_modules', '.git', 'dist', 'build', '.next'];
+    const defaultExclude = ['node_modules', '.git', 'dist', 'build', '.next'];
+    const excludeList = config?.excludePatterns || defaultExclude;
     const filteredFiles = files.filter(f => !excludeList.some(pattern => f.name.includes(pattern)));
     const totalFiles = filteredFiles.length;
     const totalSize = filteredFiles.reduce((acc, f) => acc + (f.size || 0), 0);
@@ -20,16 +21,14 @@ export class RIEAnalyzer {
       const lang = this.detectLanguage(ext);
       languageCounts[lang] = (languageCounts[lang] || 0) + 1;
       const fileName = f.name.split('/').pop() || '';
-      const baseName = fileName.replace(/\.[^/.]+$/, "");
       // Heuristic parsing for dependencies
       if (f.name.includes('src/components')) {
-        const targets = filteredFiles.filter(other => 
+        const targets = filteredFiles.filter(other =>
           (other.name.includes('src/hooks') || other.name.includes('src/lib')) &&
           ['ts', 'js', 'tsx'].includes(other.name.split('.').pop() || '')
         ).slice(0, 1);
         targets.forEach(t => dependencies.push({ source: f.name, target: t.name, type: 'import' }));
       }
-      // Check for workspace members
       if (fileName === 'package.json' && f.name !== 'package.json') {
         const workspacePath = f.name.replace('/package.json', '');
         workspaces.push(workspacePath);
@@ -51,6 +50,18 @@ export class RIEAnalyzer {
         percentage: Math.round((count / Math.max(1, totalFiles)) * 100)
       }))
       .sort((a, b) => b.fileCount - a.fileCount);
+    const finalConfig: RIEConfig = {
+      excludePatterns: excludeList,
+      analysisMode: config?.analysisMode || 'standard',
+      llmAugmentation: config?.llmAugmentation ?? true,
+      maxFileSize: config?.maxFileSize || 10 * 1024 * 1024,
+      aiModel: config?.aiModel || 'gpt-4o-mini',
+      maxTokens: config?.maxTokens || 4000,
+      maxDepth: config?.maxDepth || 10,
+      temperature: config?.temperature || 0.7,
+      outputDir: config?.outputDir || '.rie',
+      strictValidation: config?.strictValidation ?? false
+    };
     return {
       name: repoName,
       totalFiles,
@@ -61,12 +72,7 @@ export class RIEAnalyzer {
       dependencies: Array.from(new Set(dependencies.map(d => JSON.stringify(d)))).map(s => JSON.parse(s)).slice(0, 50),
       isMonorepo,
       workspaces: [...new Set(workspaces)],
-      config: config || {
-        excludePatterns: excludeList,
-        analysisMode: 'standard',
-        llmAugmentation: true,
-        maxFileSize: 10 * 1024 * 1024
-      },
+      config: finalConfig,
       analyzedAt: Date.now()
     };
   }

@@ -31,6 +31,12 @@ export interface ValidationCheck {
   status: 'pass' | 'fail' | 'warn';
   message: string;
 }
+export interface HeatmapNode {
+  path: string;
+  riskScore: number;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  fileCount: number;
+}
 export interface ValidationReport {
   score: number;
   categories: {
@@ -41,6 +47,8 @@ export interface ValidationReport {
   };
   checks: ValidationCheck[];
   issues: ValidationIssue[];
+  heatmap: HeatmapNode[];
+  recommendations: string[];
   updatedAt: number;
 }
 export interface RIEConfig {
@@ -50,6 +58,10 @@ export interface RIEConfig {
   maxFileSize: number;
   aiModel: string;
   maxTokens: number;
+  maxDepth: number;
+  temperature: number;
+  outputDir: string;
+  strictValidation: boolean;
 }
 export interface RepositorySource {
   type: 'upload' | 'github';
@@ -88,4 +100,9 @@ export interface ScanResult {
   sessionId: string;
   metadata?: RepositoryMetadata;
   error?: string;
+}
+export interface ReportExport {
+  html: string;
+  metadata: RepositoryMetadata;
+  generatedAt: number;
 }

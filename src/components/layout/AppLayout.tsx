@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, ReactNode } from "react";
 import { useSearchParams, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { OrbitalBackground } from "@/components/OrbitalBackground";
@@ -8,7 +8,7 @@ import { AppSidebarContent } from "@/components/app-sidebar";
 import { X, Github, Terminal, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 type AppLayoutProps = {
-  children: React.ProjectNode;
+  children: ReactNode;
   container?: boolean;
   className?: string;
   contentClassName?: string;
