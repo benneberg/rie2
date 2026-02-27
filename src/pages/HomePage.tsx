@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Upload, Link as LinkIcon, Sparkles, Zap, Search, Fingerprint, Map, Cpu } from 'lucide-react';
+import { Upload, Link as LinkIcon, Sparkles, Zap, Search, Fingerprint, Map, Cpu, History, ArrowRight, Loader2 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,22 +9,72 @@ import { Card } from '@/components/ui/card';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Toaster, toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { chatService } from '@/lib/chat';
+import { SessionInfo } from '../../worker/types';
 export function HomePage() {
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
   const [githubUrl, setGithubUrl] = useState('');
+  const [recentSessions, setRecentSessions] = useState<SessionInfo[]>([]);
+  const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+  useEffect(() => {
+    const loadRecents = async () => {
+      const result = await chatService.listSessions();
+      if (result.success && result.data) {
+        setRecentSessions(result.data.slice(0, 3));
+      }
+    };
+    loadRecents();
+  }, []);
+  const handleGitSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!githubUrl || isFetchingUrl) return;
+    if (!githubUrl.includes('github.com')) {
+      toast.error('Only GitHub URLs are supported currently.');
+      return;
+    }
+    setIsFetchingUrl(true);
+    const toastId = toast.loading('Connecting to GitHub API...');
+    try {
+      const sessionId = crypto.randomUUID();
+      const repoName = githubUrl.split('/').pop()?.replace('.git', '') || 'repository';
+      // Simulate Git analysis flow through Agent
+      const response = await fetch(`/api/analyze/${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: repoName,
+          url: githubUrl
+        }),
+      });
+      if (!response.ok) throw new Error('Failed to initiate Git analysis');
+      const result = await response.json();
+      if (result.success) {
+        // Register session for control plane
+        await chatService.createSession(`${repoName} (Git)`, sessionId);
+        toast.success('Git repository analyzed!', { id: toastId });
+        navigate(`/dashboard?session=${sessionId}`);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (err) {
+      toast.error('Git ingestion failed: ' + (err as Error).message, { id: toastId });
+    } finally {
+      setIsFetchingUrl(false);
+    }
+  };
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0 || isUploading) return;
     setIsUploading(true);
     const toastId = toast.loading('Reading repository contents...');
     try {
       const sessionId = crypto.randomUUID();
-      console.log(`[ArchLens] Starting analysis for session: ${sessionId}`);
+      const name = acceptedFiles[0]?.name.split('.')[0] || "Repository";
       const response = await fetch(`/api/analyze/${sessionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: acceptedFiles[0]?.name.split('.')[0] || "Repository",
+          name,
           files: acceptedFiles.map(f => ({ name: f.name, size: f.size, type: 'file' }))
         }),
       });
@@ -34,6 +84,7 @@ export function HomePage() {
       }
       const result = await response.json();
       if (result.success) {
+        await chatService.createSession(name, sessionId);
         toast.success('Analysis complete!', { id: toastId });
         navigate(`/dashboard?session=${sessionId}`);
       } else {
@@ -50,12 +101,12 @@ export function HomePage() {
     onDrop,
     accept: { 'application/zip': ['.zip'] },
     multiple: false,
-    disabled: isUploading
+    disabled: isUploading || isFetchingUrl
   });
   const features = [
     { icon: Fingerprint, title: "Deep Scan", desc: "Binary-level structural analysis" },
     { icon: Map, title: "Graph Viz", desc: "Interactive dependency mapping" },
-    { icon: Cpu, title: "AI Docs", desc: "Context-aware artifact generation" }
+    { icon: Cpu, title: "AI Narrative", desc: "Context-aware architectural synthesis" }
   ];
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 bg-background selection:bg-primary/20">
@@ -85,9 +136,9 @@ export function HomePage() {
             <Card
               {...getRootProps()}
               className={cn(
-                "p-8 border-2 border-dashed transition-all cursor-pointer group bg-card/40 backdrop-blur-md relative overflow-hidden",
+                "p-10 border-2 border-dashed transition-all cursor-pointer group bg-card/40 backdrop-blur-md relative overflow-hidden flex flex-col items-center justify-center min-h-[220px]",
                 isDragActive ? "border-primary bg-primary/5 ring-4 ring-primary/10" : "border-border hover:border-primary/50",
-                isUploading && "opacity-50 cursor-wait"
+                (isUploading || isFetchingUrl) && "opacity-50 cursor-wait"
               )}
             >
               <input {...getInputProps()} />
@@ -101,11 +152,11 @@ export function HomePage() {
                 </div>
               </div>
             </Card>
-            <Card className="p-8 border border-border bg-card/40 backdrop-blur-md flex flex-col justify-center">
-              <div className="space-y-4">
+            <Card className="p-10 border border-border bg-card/40 backdrop-blur-md flex flex-col justify-center min-h-[220px]">
+              <form className="space-y-4" onSubmit={handleGitSubmit}>
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-secondary"><LinkIcon className="w-5 h-5 text-primary" /></div>
-                  <h3 className="text-lg font-bold">Git URL</h3>
+                  <h3 className="text-lg font-bold">GitHub Repository</h3>
                 </div>
                 <div className="flex gap-2">
                   <Input
@@ -113,16 +164,38 @@ export function HomePage() {
                     value={githubUrl}
                     onChange={(e) => setGithubUrl(e.target.value)}
                     className="bg-secondary/30"
-                    disabled={isUploading}
+                    disabled={isUploading || isFetchingUrl}
                   />
-                  <Button disabled={!githubUrl || isUploading} className="shrink-0" onClick={() => toast.info('URL scanning coming soon!')}>
-                    <Search className="w-4 h-4" />
+                  <Button type="submit" disabled={!githubUrl || isUploading || isFetchingUrl} className="shrink-0 bg-primary shadow-soft">
+                    {isFetchingUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground text-left">Public GitHub repositories only</p>
-              </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Public Repositories Only</p>
+                </div>
+              </form>
             </Card>
           </div>
+          {recentSessions.length > 0 && (
+            <div className="pt-8 animate-in fade-in duration-700 delay-300">
+               <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4 flex items-center justify-center gap-2">
+                 <History className="w-3 h-3" /> Recent Analysed Scans
+               </h4>
+               <div className="flex flex-wrap justify-center gap-3">
+                 {recentSessions.map((session) => (
+                   <button 
+                     key={session.id}
+                     onClick={() => navigate(`/dashboard?session=${session.id}`)}
+                     className="px-4 py-2 rounded-full border border-border bg-card/50 hover:bg-secondary transition-all flex items-center gap-3 text-sm font-medium group"
+                   >
+                     <span className="truncate max-w-[150px]">{session.title}</span>
+                     <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                   </button>
+                 ))}
+               </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mt-16 pt-10 border-t border-border/40">
             {features.map((feature, i) => (
               <motion.div
@@ -132,8 +205,8 @@ export function HomePage() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 * i }}
               >
-                <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10 group-hover:bg-primary/10 transition-colors">
-                   <feature.icon className="w-6 h-6 text-primary" />
+                <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/10 group-hover:bg-primary/10 transition-colors shadow-sm">
+                   <feature.icon className="w-6 h-6 text-primary group-hover:scale-110 transition-transform" />
                 </div>
                 <div>
                   <p className="text-sm font-bold tracking-tight">{feature.title}</p>
@@ -143,12 +216,12 @@ export function HomePage() {
             ))}
           </div>
         </motion.div>
-        <footer className="mt-20 w-full max-w-3xl">
-          <div className="bg-secondary/50 border border-border rounded-2xl p-6 text-center">
-            <p className="text-sm font-semibold flex items-center justify-center gap-2 mb-2">
-               <Zap className="w-4 h-4 text-amber-500" /> Usage Policy
+        <footer className="mt-24 w-full max-w-3xl">
+          <div className="bg-secondary/30 border border-border rounded-2xl p-8 text-center backdrop-blur-sm">
+            <p className="text-sm font-bold flex items-center justify-center gap-2 mb-3">
+               <Zap className="w-4 h-4 text-amber-500 fill-amber-500" /> Usage Policy
             </p>
-            <p className="text-xs text-muted-foreground max-w-lg mx-auto leading-relaxed">
+            <p className="text-xs text-muted-foreground max-w-lg mx-auto leading-relaxed font-medium">
               Important: Although this project has AI capabilities, there is a limit on the total number of requests that can be made to the AI servers across all user apps in a given time period.
             </p>
           </div>

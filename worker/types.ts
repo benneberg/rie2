@@ -1,4 +1,4 @@
-import { RepositoryMetadata } from '../src/lib/rie-types';
+import { RepositoryMetadata, RIEConfig } from '../src/lib/rie-types';
 export interface ApiResponse<T = unknown> { success: boolean; data?: T; error?: string; }
 export interface WeatherResult {
   location: string;
@@ -32,6 +32,7 @@ export interface ChatState {
   model: string;
   streamingMessage?: string;
   metadata?: RepositoryMetadata;
+  config: RIEConfig;
 }
 export interface SessionInfo {
   id: string;
