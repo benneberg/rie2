@@ -82,7 +82,8 @@ function runSetupCommands() {
     "bun add react-dropzone@^14.2.3",
     "bun add react-markdown@^9.0.1",
     "bun add remark-gfm@^4.0.0",
-    "bun add mermaid@^10.9.2"
+    "bun add mermaid@^10.9.2",
+    "bun add zod"
 ];
     
     if (commands.length === 0) {
