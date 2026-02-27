@@ -15,7 +15,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     messages: [],
     sessionId: crypto.randomUUID(),
     isProcessing: false,
-    model: 'google-ai-studio/gemini-2.0-flash',
+    model: 'gpt-4o-mini',
     config: {
       excludePatterns: ['node_modules', '.git', 'dist', 'build', '.next'],
       analysisMode: 'standard',
@@ -27,7 +27,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     this.chatHandler = new ChatHandler(
       this.env.CF_AI_BASE_URL,
       this.env.CF_AI_API_KEY,
-      this.state.model
+      'gpt-4o-mini'
     );
   }
   async onRequest(request: Request): Promise<Response> {
@@ -73,6 +73,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
       if (parsed) {
         const { owner, repo, ref } = parsed;
         const targetRef = ref || 'main';
+        source.ref = targetRef;
         // Try the specified ref, fallback to 'master' if 'main' fails
         let zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${targetRef}`;
         try {
@@ -154,13 +155,14 @@ export class ChatAgent extends Agent<Env, ChatState> {
         const encoder = createEncoder();
         (async () => {
           try {
+            const streamingMessageRef = { value: '' };
             this.setState({ ...this.state, streamingMessage: '' });
             const response = await this.chatHandler!.processMessage(
               `${metaContext}\n\nUSER QUERY: ${message}`,
               this.state.messages,
               (chunk) => {
-                const currentStreaming = this.state.streamingMessage || '';
-                this.setState({ ...this.state, streamingMessage: currentStreaming + chunk });
+                streamingMessageRef.value += chunk;
+                this.setState({ ...this.state, streamingMessage: streamingMessageRef.value });
                 writer.write(encoder.encode(chunk));
               }
             );
