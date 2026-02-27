@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Upload, Link as LinkIcon, Sparkles, Search, Loader2, ArrowRight, Zap, Globe, Cpu, Fingerprint, Github } from 'lucide-react';
+import { Upload, ArrowRight, Loader2, Github, Fingerprint, Cpu, Zap } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,9 +75,9 @@ export function HomePage() {
       }
     } catch (error) {
       console.error(error);
-      toast.error('CLONE_FAILURE', { 
-        id: toastId, 
-        description: error instanceof Error ? error.message : 'Ensure the repository is public and valid.' 
+      toast.error('CLONE_FAILURE', {
+        id: toastId,
+        description: error instanceof Error ? error.message : 'Ensure the repository is public and valid.'
       });
     } finally {
       setIsFetchingUrl(false);
@@ -97,7 +97,7 @@ export function HomePage() {
             ArchLens
           </div>
           <div className="absolute -top-4 -right-8 bg-white/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-white/50 border border-white/5">
-            RC_4.0.1
+            PRO_4.0.1
           </div>
         </motion.div>
         <motion.h1
@@ -136,7 +136,7 @@ export function HomePage() {
             </div>
             <div className="space-y-4">
               <Input
-                placeholder="HTTPS://GITHUB.COM/USER/REPO"
+                placeholder="HTTPS://GITHUB.COM/USER/REPO [/BRANCH]"
                 className="bg-black/40 border-white/10 text-xs font-mono py-6 tracking-widest"
                 value={githubUrl}
                 onChange={(e) => setGithubUrl(e.target.value)}
@@ -185,7 +185,7 @@ export function HomePage() {
           ))}
         </div>
         <footer className="mt-40 opacity-30 text-[10px] font-mono uppercase tracking-[0.3em] pb-10">
-          ArchLens Terminal • Established 2024 • Build_System_V4 • Note: AI usage limits apply.
+          ArchLens Terminal • v4.0.1_PRODUCTION • Note: AI usage limits apply.
         </footer>
       </div>
     </div>

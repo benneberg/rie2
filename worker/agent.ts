@@ -8,6 +8,7 @@ import { createMessage, createStreamResponse, createEncoder } from './utils';
 import { RIEAnalyzer } from './rie-analyzer';
 import { RIEValidator } from './rie-validator';
 import { RepositorySource } from '../src/lib/rie-types';
+import { parseGitHubUrl } from '../src/lib/utils';
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
   initialState: ChatState = {
@@ -68,22 +69,30 @@ export class ChatAgent extends Agent<Env, ChatState> {
     let analysisFiles = body.files || [];
     let source: RepositorySource = { type: 'upload' };
     if (body.url) {
-      const githubMatch = body.url.match(/github\.com\/([^/]+)\/([^/]+)/);
-      if (githubMatch) {
-        const owner = githubMatch[1];
-        const repo = githubMatch[2].replace(/\.git$/, '');
-        const zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/main`;
+      const parsed = parseGitHubUrl(body.url);
+      if (parsed) {
+        const { owner, repo, ref } = parsed;
+        const targetRef = ref || 'main';
+        // Try the specified ref, fallback to 'master' if 'main' fails
+        let zipUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/${targetRef}`;
         try {
-          const res = await fetch(zipUrl, {
+          let res = await fetch(zipUrl, {
             headers: { 'User-Agent': 'ArchLens-Ingestion-Agent' }
           });
-          if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+          // Fallback logic for default branch if 'main' was assumed but it is actually 'master'
+          if (!res.ok && targetRef === 'main') {
+            const fallbackUrl = `https://api.github.com/repos/${owner}/${repo}/zipball/master`;
+            res = await fetch(fallbackUrl, {
+              headers: { 'User-Agent': 'ArchLens-Ingestion-Agent' }
+            });
+            if (res.ok) source.ref = 'master';
+          }
+          if (!res.ok) throw new Error(`GitHub API returned ${res.status} for ${zipUrl}`);
           const arrayBuffer = await res.arrayBuffer();
           const zip = await JSZip.loadAsync(arrayBuffer);
           const filesInZip: any[] = [];
           for (const [path, file] of Object.entries(zip.files)) {
             if (file.dir) continue;
-            // GitHub zips have a root folder like "owner-repo-hash/", we strip it
             const normalizedPath = path.split('/').slice(1).join('/');
             if (!normalizedPath) continue;
             filesInZip.push({
@@ -93,11 +102,11 @@ export class ChatAgent extends Agent<Env, ChatState> {
             });
           }
           analysisFiles = filesInZip;
-          source = { 
-            type: 'github', 
-            url: body.url, 
+          source = {
+            type: 'github',
+            url: body.url,
             repo: `${owner}/${repo}`,
-            ref: 'main'
+            ref: source.ref || targetRef
           };
         } catch (e) {
           return Response.json({ success: false, error: `Git Ingestion Failed: ${e instanceof Error ? e.message : 'Unknown'}` }, { status: 500 });
@@ -132,10 +141,10 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
     const userMessage = createMessage('user', message.trim());
     this.setState({ ...this.state, messages: [...this.state.messages, userMessage], isProcessing: true });
-    const metaContext = this.state.metadata ? 
-      `CONTEXT: ArchLens Repository "${this.state.metadata.name}". Health: ${this.state.metadata.validation?.score}/100. 
+    const metaContext = this.state.metadata ?
+      `CONTEXT: ArchLens Repository "${this.state.metadata.name}". Health: ${this.state.metadata.validation?.score}/100.
        LANG: ${this.state.metadata.primaryLanguage}. FILES: ${this.state.metadata.totalFiles}. SOURCE: ${this.state.metadata.source?.type}.
-       MAP: ${this.state.metadata.structure.slice(0, 30).map(f => f.path).join(', ')}.` 
+       MAP: ${this.state.metadata.structure.slice(0, 30).map(f => f.path).join(', ')}.`
       : `CONTEXT: ArchLens Assistant. No active repository context.`;
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');
@@ -150,7 +159,8 @@ export class ChatAgent extends Agent<Env, ChatState> {
               `${metaContext}\n\nUSER QUERY: ${message}`,
               this.state.messages,
               (chunk) => {
-                this.setState({ ...this.state, streamingMessage: (this.state.streamingMessage || '') + chunk });
+                const currentStreaming = this.state.streamingMessage || '';
+                this.setState({ ...this.state, streamingMessage: currentStreaming + chunk });
                 writer.write(encoder.encode(chunk));
               }
             );

@@ -36,16 +36,24 @@ export function DependencyGraph({ dependencies }: DependencyGraphProps) {
   useEffect(() => {
     const renderGraph = async () => {
       if (containerRef.current && dependencies.length > 0) {
-        const edges = dependencies.slice(0, 30).map(edge => {
-          const source = edge.source.replace(/\//g, '_').replace(/\./g, '_');
-          const target = edge.target.replace(/\//g, '_').replace(/\./g, '_');
-          return `  ${source}["${edge.source}"] --> ${target}["${edge.target}"]`;
+        // More aggressive sanitization for Mermaid IDs: alphanumeric only, must start with letter
+        const sanitizeId = (path: string) => {
+          const id = path.replace(/[^a-zA-Z0-9]/g, '_');
+          return `node_${id}`;
+        };
+        const edges = dependencies.slice(0, 50).map(edge => {
+          const sourceId = sanitizeId(edge.source);
+          const targetId = sanitizeId(edge.target);
+          // Properly escape labels with double quotes to prevent syntax breakage from special chars
+          return `  ${sourceId}["${edge.source}"] --> ${targetId}["${edge.target}"]`;
         }).join('\n');
         const graphDefinition = `graph TD\n${edges}`;
         const id = `mermaid-${Date.now()}`;
         try {
           const { svg } = await mermaid.render(id, graphDefinition);
-          containerRef.current.innerHTML = svg;
+          if (containerRef.current) {
+            containerRef.current.innerHTML = svg;
+          }
           setSvgContent(svg);
         } catch (err) {
           console.error('Mermaid render error:', err);
@@ -84,13 +92,13 @@ export function DependencyGraph({ dependencies }: DependencyGraphProps) {
         </Button>
       </div>
       <div className="w-full overflow-hidden rounded-xl bg-card/20 p-6 min-h-[400px]">
-        <div 
-          ref={containerRef} 
-          className="w-full flex justify-center overflow-x-auto" 
+        <div
+          ref={containerRef}
+          className="w-full flex justify-center overflow-x-auto"
         />
         <div className="mt-8 border-t border-border/40 pt-4 flex items-center justify-between text-2xs text-muted-foreground">
-          <span className="font-medium uppercase tracking-widest">Architectural Graph v1.0</span>
-          <span>Showing {Math.min(30, dependencies.length)} top relationships</span>
+          <span className="font-medium uppercase tracking-widest">Architectural Graph v4.0</span>
+          <span>Showing {Math.min(50, dependencies.length)} top relationships</span>
         </div>
       </div>
     </div>
