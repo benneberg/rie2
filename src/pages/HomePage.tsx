@@ -1,8 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Upload, ArrowRight, Loader2, Github, Fingerprint, Cpu, Zap } from 'lucide-react';
-import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast, Toaster } from 'sonner';
@@ -15,8 +14,15 @@ export function HomePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [githubUrl, setGithubUrl] = useState('');
   const [isFetchingUrl, setIsFetchingUrl] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const uploadingRef = useRef(false);
+  useEffect(() => {
+    uploadingRef.current = isUploading;
+  }, [isUploading]);
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0 || isUploading) return;
+    if (acceptedFiles.length === 0 || uploadingRef.current) return;
     setIsUploading(true);
     const toastId = toast.loading('PARSING_ARCHIVE_TOPOLOGY...');
     try {
@@ -53,12 +59,36 @@ export function HomePage() {
     } finally {
       setIsUploading(false);
     }
-  }, [navigate, isUploading]);
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: { 'application/zip': ['.zip'] },
-    multiple: false
-  });
+  }, [navigate]);
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!dropRef.current?.contains(e.relatedTarget as Node)) {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragActive(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 1 && files[0].name.endsWith('.zip')) {
+      onDrop(files);
+    } else {
+      toast.error('Please drop a single .ZIP file');
+    }
+  };
   const handleGithubClone = async () => {
     if (!githubUrl || isFetchingUrl) return;
     const parsed = parseGitHubUrl(githubUrl);
@@ -128,13 +158,16 @@ export function HomePage() {
         </motion.p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl mb-24">
           <div
-            {...getRootProps()}
+            ref={dropRef}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             className={cn(
               "p-12 glass border-2 border-dashed transition-all group flex flex-col items-center justify-center min-h-[300px] cursor-pointer",
               isDragActive ? "border-primary bg-primary/5" : "border-white/10 hover:border-primary/50"
             )}
           >
-            <input {...getInputProps()} />
             <Upload className="w-12 h-12 text-primary mb-6 group-hover:scale-110 transition-transform" />
             <h3 className="text-xl font-display font-bold uppercase mb-2">Ingest Archive</h3>
             <p className="text-[10px] font-mono opacity-50 uppercase tracking-[0.2em]">Drop .ZIP Repository</p>
