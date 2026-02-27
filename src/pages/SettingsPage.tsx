@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Save, RefreshCw, Layers, Shield, Zap, Filter } from 'lucide-react';
+import { Trash2, Save, RefreshCw, Layers, Shield, Filter } from 'lucide-react';
 import { chatService } from '@/lib/chat';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
+import { cn } from '@/lib/utils';
 export function SettingsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -30,7 +31,7 @@ export function SettingsPage() {
         setConfig(response.data.config);
       }
     } catch (err) {
-      console.error('Failed to load config:', err);
+      console.error('CFG_ERR', err);
     }
   }, []);
   useEffect(() => {
@@ -39,100 +40,69 @@ export function SettingsPage() {
       return;
     }
     loadConfig();
-  }, [sessionId, navigate, loadConfig]);
+  }, [sessionId, loadConfig]);
   const handleSave = async () => {
     if (!sessionId) return;
-    const toastId = toast.loading('Persisting configuration...');
+    const toastId = toast.loading('PERSISTING_SESSION_CONFIG...');
     try {
       const response = await fetch(`/api/chat/${sessionId}/update-config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ config })
       });
-      const result = await response.json();
-      if (result.success) {
-        toast.success('Configuration updated!', { id: toastId });
-      } else {
-        throw new Error(result.error || 'Failed to update');
+      if (response.ok) {
+        toast.success('CONFIG_SYNC_SUCCESS', { id: toastId });
       }
     } catch (err) {
-      toast.error('Failed to update settings: ' + (err as Error).message, { id: toastId });
+      toast.error('SYNC_FAILURE', { id: toastId });
     }
-  };
-  const triggerRescan = async () => {
-    if (!sessionId || isRefreshing) return;
-    setIsRefreshing(true);
-    const toastId = toast.loading('Re-scanning repository with new configuration...');
-    try {
-      const stateResponse = await chatService.getMessages();
-      const currentMetadata = stateResponse.data?.metadata;
-      if (!currentMetadata) throw new Error('No repository metadata found for this session');
-      const response = await fetch(`/api/analyze/${sessionId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: currentMetadata.name,
-          files: currentMetadata.structure
-        }),
-      });
-      const result = await response.json();
-      if (result.success) {
-        toast.success('Re-analysis complete!', { id: toastId });
-        navigate(`/dashboard?session=${sessionId}`);
-      } else {
-        throw new Error(result.error);
-      }
-    } catch (err) {
-      toast.error('Re-scan failed: ' + (err as Error).message, { id: toastId });
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-  const addPattern = () => {
-    if (newPattern && !config.excludePatterns.includes(newPattern)) {
-      setConfig({ ...config, excludePatterns: [...config.excludePatterns, newPattern] });
-      setNewPattern('');
-    }
-  };
-  const removePattern = (p: string) => {
-    setConfig({ ...config, excludePatterns: config.excludePatterns.filter(item => item !== p) });
   };
   return (
     <AppLayout container>
-      <div className="space-y-8">
-        <header className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Session Settings</h1>
-          <p className="text-muted-foreground">Manage analysis parameters and operational behavior for this repository.</p>
+      <Toaster richColors position="top-center" theme="dark" />
+      <div className="space-y-12">
+        <header className="space-y-2">
+          <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-white/20">SYSTEM_PARAMETERS</Badge>
+          <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-none">Settings</h1>
         </header>
         <Tabs defaultValue="patterns" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-secondary/30 mb-8 p-1">
-            <TabsTrigger value="patterns" className="flex gap-2"><Filter className="w-4 h-4" /> Scan Patterns</TabsTrigger>
-            <TabsTrigger value="analysis" className="flex gap-2"><Layers className="w-4 h-4" /> Analysis Mode</TabsTrigger>
-            <TabsTrigger value="safety" className="flex gap-2"><Shield className="w-4 h-4" /> Guardrails</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 bg-white/5 border border-white/5 h-14 mb-12">
+            <TabsTrigger value="patterns" className="text-[10px] font-black uppercase tracking-widest">Exclude Filters</TabsTrigger>
+            <TabsTrigger value="analysis" className="text-[10px] font-black uppercase tracking-widest">Core Engine</TabsTrigger>
+            <TabsTrigger value="safety" className="text-[10px] font-black uppercase tracking-widest">Guardrails</TabsTrigger>
           </TabsList>
           <TabsContent value="patterns">
-            <Card className="bg-card/40 backdrop-blur-md border-border">
-              <CardHeader>
-                <CardTitle>Exclusion Patterns</CardTitle>
-                <CardDescription>Files matching these patterns will be ignored during RIE analysis.</CardDescription>
+            <Card className="glass shadow-brutal-dark">
+              <CardHeader className="border-b border-white/5">
+                <CardTitle className="font-display font-bold uppercase tracking-widest text-xs">Exclusion Matrix</CardTitle>
+                <CardDescription className="text-[10px] font-mono opacity-50">PATTERNS_IGNORED_BY_RIE_ENGINE</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex gap-2">
+              <CardContent className="p-8 space-y-8">
+                <div className="flex gap-4">
                   <Input 
-                    placeholder="e.g. dist, .next, *.log" 
-                    value={newPattern} 
-                    onChange={(e) => setNewPattern(e.target.value)} 
-                    onKeyDown={(e) => e.key === 'Enter' && addPattern()}
+                    placeholder="E.G. NODE_MODULES, *.LOG" 
+                    className="bg-black/40 border-white/10 font-mono text-xs tracking-widest"
+                    value={newPattern}
+                    onChange={(e) => setNewPattern(e.target.value)}
+                    onKeyDown={(e) => {
+                      if(e.key === 'Enter' && newPattern) {
+                        setConfig({...config, excludePatterns: [...config.excludePatterns, newPattern]});
+                        setNewPattern('');
+                      }
+                    }}
                   />
-                  <Button onClick={addPattern}>Add Pattern</Button>
+                  <Button onClick={() => {
+                    if(newPattern) {
+                      setConfig({...config, excludePatterns: [...config.excludePatterns, newPattern]});
+                      setNewPattern('');
+                    }
+                  }} className="btn-brutal-dark px-8">Add</Button>
                 </div>
-                <div className="flex flex-wrap gap-2 pt-2">
+                <div className="flex flex-wrap gap-3">
                   {config.excludePatterns.map(p => (
-                    <Badge key={p} variant="secondary" className="pl-3 pr-2 py-1.5 flex items-center gap-2 border border-border/50">
-                      <span className="font-mono text-xs">{p}</span>
-                      <button onClick={() => removePattern(p)} className="text-muted-foreground hover:text-destructive transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <Badge key={p} className="bg-white/5 border border-white/10 px-4 py-2 flex items-center gap-3">
+                      <span className="font-mono text-[10px] tracking-widest">{p}</span>
+                      <Trash2 className="w-3 h-3 opacity-30 cursor-pointer hover:opacity-100 hover:text-red-500" onClick={() => setConfig({...config, excludePatterns: config.excludePatterns.filter(i => i !== p)})} />
                     </Badge>
                   ))}
                 </div>
@@ -140,73 +110,31 @@ export function SettingsPage() {
             </Card>
           </TabsContent>
           <TabsContent value="analysis">
-            <Card className="bg-card/40 backdrop-blur-md border-border">
-              <CardHeader>
-                <CardTitle>Scan Depth & Intelligence</CardTitle>
-                <CardDescription>Control how the RIE engine processes source files.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-xl border border-border/40 bg-secondary/20 hover:bg-secondary/30 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-bold">Deep Analysis Mode</Label>
-                    <p className="text-xs text-muted-foreground">Enables multi-pass structural resolution for complex projects.</p>
+             <Card className="glass shadow-brutal-dark">
+                <CardContent className="p-8 space-y-6">
+                  <div className="flex items-center justify-between p-6 bg-white/5 border border-white/5">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-black uppercase tracking-widest">Deep Resolution Mode</Label>
+                      <p className="text-[9px] font-mono opacity-50">ENABLE_MULTI_PASS_STRUCTURAL_WALK</p>
+                    </div>
+                    <Switch checked={config.analysisMode === 'deep'} onCheckedChange={(v) => setConfig({...config, analysisMode: v ? 'deep' : 'standard'})} />
                   </div>
-                  <Switch 
-                    checked={config.analysisMode === 'deep'} 
-                    onCheckedChange={(checked) => setConfig({...config, analysisMode: checked ? 'deep' : 'standard'})} 
-                  />
-                </div>
-                <div className="flex items-center justify-between p-4 rounded-xl border border-border/40 bg-secondary/20 hover:bg-secondary/30 transition-colors">
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-bold">LLM Context Enrichment</Label>
-                    <p className="text-xs text-muted-foreground">Allows AI to ingest architectural metadata during conversations.</p>
+                  <div className="flex items-center justify-between p-6 bg-white/5 border border-white/5">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] font-black uppercase tracking-widest">Context Augmentation</Label>
+                      <p className="text-[9px] font-mono opacity-50">INJECT_METADATA_INTO_LLM_LAYERS</p>
+                    </div>
+                    <Switch checked={config.llmAugmentation} onCheckedChange={(v) => setConfig({...config, llmAugmentation: v})} />
                   </div>
-                  <Switch 
-                    checked={config.llmAugmentation} 
-                    onCheckedChange={(checked) => setConfig({...config, llmAugmentation: checked})} 
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="safety">
-            <Card className="bg-card/40 backdrop-blur-md border-border">
-              <CardHeader>
-                <CardTitle>Resource Guardrails</CardTitle>
-                <CardDescription>Limit system intensity to stay within Cloudflare Worker limits.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                   <div className="flex justify-between items-center">
-                     <Label>Max Individual File Size (MB)</Label>
-                     <span className="text-xs font-mono font-bold text-primary">{config.maxFileSize}MB</span>
-                   </div>
-                   <Input 
-                     type="range"
-                     min="1"
-                     max="50"
-                     value={config.maxFileSize} 
-                     onChange={(e) => setConfig({...config, maxFileSize: parseInt(e.target.value)})} 
-                     className="cursor-pointer"
-                   />
-                   <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest flex items-center gap-1.5">
-                     <Zap className="w-3 h-3 text-amber-500" /> Optimal Range: 5MB - 20MB
-                   </p>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+             </Card>
           </TabsContent>
         </Tabs>
-        <div className="flex justify-between items-center pt-8 border-t">
-           <Button variant="ghost" onClick={() => navigate(-1)}>Discard Changes</Button>
-           <div className="flex gap-3">
-             <Button variant="outline" onClick={triggerRescan} disabled={isRefreshing}>
-               <RefreshCw className={cn("w-4 h-4 mr-2", isRefreshing && "animate-spin")} /> 
-               Apply & Re-scan
-             </Button>
-             <Button className="bg-primary shadow-glow px-8" onClick={handleSave}>
-               <Save className="w-4 h-4 mr-2" /> Save Configuration
-             </Button>
+        <div className="flex justify-between items-center pt-12 border-t border-white/5">
+           <Button variant="ghost" className="text-[10px] font-black uppercase tracking-widest opacity-50 hover:opacity-100" onClick={() => navigate(-1)}>Cancel</Button>
+           <div className="flex gap-4">
+             <Button variant="outline" className="btn-brutal-dark px-8">Reset_Defaults</Button>
+             <Button onClick={handleSave} className="btn-brutal-amber px-12">Commit_Config</Button>
            </div>
         </div>
       </div>

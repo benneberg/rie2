@@ -1,22 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { Home, FileText, LayoutDashboard, History, Settings, ShieldCheck, PlusCircle, Code2, Globe, FileJson, AlertCircle } from "lucide-react";
+import { Home, FileText, LayoutDashboard, History, Settings, Code2, PlusCircle, AlertCircle } from "lucide-react";
 import { useSearchParams, Link, useLocation } from "react-router-dom";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarHeader,
-  SidebarSeparator,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 import { chatService } from "@/lib/chat";
 import { SessionInfo } from "../../worker/types";
 import { cn } from "@/lib/utils";
-export function AppSidebar(): JSX.Element {
+/**
+ * AppSidebarContent - Refactored to be used inside the MenuPanel overlay
+ */
+export function AppSidebarContent(): JSX.Element {
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const sessionId = searchParams.get('session');
@@ -25,104 +17,55 @@ export function AppSidebar(): JSX.Element {
     const loadSessions = async () => {
       const result = await chatService.listSessions();
       if (result.success && result.data) {
-        setRecentSessions(result.data.slice(0, 15));
+        setRecentSessions(result.data.slice(0, 8));
       }
     };
     loadSessions();
   }, [sessionId, location.pathname]);
-  const isHome = location.pathname === '/';
-  const isDashboard = location.pathname === '/dashboard';
-  const isStudio = location.pathname === '/studio';
-  const isSettings = location.pathname === '/settings';
   return (
-    <Sidebar className="border-r border-border/40">
-      <SidebarHeader className="p-4">
-        <div className="flex items-center justify-between mb-4">
-          <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-glow flex items-center justify-center">
-              <Code2 className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-sm font-black tracking-tight uppercase">ArchLens</span>
+    <div className="flex flex-col h-full space-y-12">
+      <div className="space-y-4">
+        <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">Quick Access</h4>
+        <div className="grid grid-cols-1 gap-2">
+          <Link to="/" className="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 transition-all border border-transparent hover:border-white/10 group">
+            <Home className="w-4 h-4 text-[#f59e0b]" />
+            <span className="text-xs font-bold uppercase tracking-widest">Terminal Landing</span>
           </Link>
-        </div>
-        <Link to="/">
-          <Button variant="outline" className="w-full justify-start gap-2 border-dashed h-9 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 text-xs font-bold transition-all">
-            <PlusCircle className="w-4 h-4 text-primary" />
-            New Repository
+          <Button variant="outline" className="w-full justify-start gap-3 p-3 border-dashed border-white/20 hover:border-[#f59e0b] bg-transparent text-xs uppercase tracking-widest h-auto" onClick={() => window.location.href = '/'}>
+            <PlusCircle className="w-4 h-4 text-[#f59e0b]" /> New Archive Scan
           </Button>
-        </Link>
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">Core Operations</SidebarGroupLabel>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={isHome} className={cn("transition-all", isHome && "bg-primary/10 text-primary font-bold")}>
-                <Link to="/"><Home className="w-4 h-4" /> <span>Landing</span></Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            {sessionId && (
-              <>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isDashboard} className={cn("transition-all", isDashboard && "bg-primary/10 text-primary font-bold")}>
-                    <Link to={`/dashboard?session=${sessionId}`}><LayoutDashboard className="w-4 h-4" /> <span>Dashboard</span></Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isStudio} className={cn("transition-all", isStudio && "bg-primary/10 text-primary font-bold")}>
-                    <Link to={`/studio?session=${sessionId}`}><FileText className="w-4 h-4" /> <span>Doc Studio</span></Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild isActive={isSettings} className={cn("transition-all", isSettings && "bg-primary/10 text-primary font-bold")}>
-                    <Link to={`/settings?session=${sessionId}`}><Settings className="w-4 h-4" /> <span>Settings</span></Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </>
-            )}
-          </SidebarMenu>
-        </SidebarGroup>
-        <SidebarSeparator className="opacity-40" />
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">Recent History</SidebarGroupLabel>
-          <SidebarMenu>
-            {recentSessions.map((session) => (
-              <SidebarMenuItem key={session.id}>
-                <SidebarMenuButton 
-                  asChild 
-                  isActive={sessionId === session.id}
-                  className={cn(
-                    "transition-all h-9",
-                    sessionId === session.id ? "bg-accent/50 text-foreground font-bold" : "hover:bg-muted/50"
-                  )}
-                >
-                  <Link to={`/dashboard?session=${session.id}`} className="flex items-center gap-2">
-                    <History className={cn("w-4 h-4", sessionId === session.id ? "text-primary" : "text-muted-foreground/50")} />
-                    <span className="truncate text-xs">{session.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-            {recentSessions.length === 0 && (
-              <div className="px-3 py-4 text-[10px] text-muted-foreground/40 italic text-center flex flex-col items-center gap-2">
-                <AlertCircle className="w-4 h-4" />
-                No scan history available
-              </div>
-            )}
-          </SidebarMenu>
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter className="p-4 border-t border-border/40 bg-muted/5">
-        <div className="flex flex-col gap-3">
-           <div className="flex items-center gap-2 text-[9px] font-bold text-emerald-500/80 tracking-widest uppercase">
-             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-             RIE Engine Active
-           </div>
-           <div className="flex items-center gap-2 text-[9px] font-bold text-muted-foreground/40 tracking-widest uppercase">
-             <ShieldCheck className="w-3 h-3" /> System Stable v1.0.4
-           </div>
         </div>
-      </SidebarFooter>
-    </Sidebar>
+      </div>
+      <div className="space-y-4">
+        <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">Scanned_Archives_Recent</h4>
+        <div className="space-y-2">
+          {recentSessions.map((session) => (
+            <Link 
+              key={session.id} 
+              to={`/dashboard?session=${session.id}`}
+              className={cn(
+                "flex items-center gap-3 p-3 transition-all border",
+                sessionId === session.id 
+                  ? "bg-[#f59e0b]/10 border-[#f59e0b]/30 text-[#f59e0b]" 
+                  : "bg-white/5 border-transparent hover:border-white/10 text-white/50"
+              )}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span className="truncate text-[10px] font-mono tracking-widest uppercase">{session.title}</span>
+            </Link>
+          ))}
+          {recentSessions.length === 0 && (
+            <div className="p-8 text-center glass border-white/5">
+              <AlertCircle className="w-4 h-4 mx-auto mb-2 opacity-20" />
+              <span className="text-[9px] font-mono uppercase opacity-20">No_Session_Logs_Found</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
+}
+// Fallback empty export to satisfy potential standard sidebar references
+export function AppSidebar() {
+  return null;
 }
