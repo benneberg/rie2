@@ -1,10 +1,9 @@
 import { Agent } from 'agents';
 import type { Env } from './core-utils';
-import type { ChatState } from './types';
-import { ChatHandler } from './chat';
+import type { ChatState } from './types';import { ChatHandler } from './chat';
 import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
-
+import { RIEAnalyzer } from './rie-analyzer';
 /**
  * ChatAgent - Main agent class using Cloudflare Agents SDK
  * 
@@ -58,6 +57,10 @@ export class ChatAgent extends Agent<Env, ChatState> {
       if (method === 'POST' && url.pathname === '/model') {
         return this.handleModelUpdate(await request.json());
       }
+      if (method === 'POST' && url.pathname === '/analyze') {
+        return this.handleAnalyze(await request.json());
+      }
+
       
       return Response.json({ 
         success: false, 
@@ -236,9 +239,25 @@ export class ChatAgent extends Agent<Env, ChatState> {
     this.setState({ ...this.state, model });
     this.chatHandler?.updateModel(model);
     
-    return Response.json({ 
-      success: true, 
-      data: this.state 
+    return Response.json({
+      success: true,
+      data: this.state
     });
+  }
+
+  /**
+   * Process repository analysis
+   */
+  private async handleAnalyze(body: { files: any[], name?: string }): Promise<Response> {
+    const { files, name = "Repository" } = body;
+    
+    const metadata = await RIEAnalyzer.analyze(name, files);
+    
+    this.setState({
+      ...this.state,
+      metadata
+    } as any);
+
+    return Response.json({ success: true, metadata });
   }
 }

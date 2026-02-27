@@ -1,138 +1,143 @@
-// Home page of the app.
-// Currently a demo placeholder "please wait" screen.
-// Replace this file with your actual app UI. Do not delete it to use some other file as homepage. Simply replace the entire contents of this file.
-
-import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { HAS_TEMPLATE_DEMO, TemplateDemo } from '@/components/TemplateDemo'
-import { Button } from '@/components/ui/button'
-import { Toaster, toast } from '@/components/ui/sonner'
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Upload, Link as LinkIcon, Sparkles, ArrowRight, Shield, Zap, Search } from 'lucide-react';
+import { useDropzone } from 'react-dropzone';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { Toaster, toast } from 'sonner';
+import { chatService } from '@/lib/chat';
 export function HomePage() {
-  const [coins, setCoins] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [elapsedMs, setElapsedMs] = useState(0)
-
-  useEffect(() => {
-    if (!isRunning || startedAt === null) return
-
-    const t = setInterval(() => {
-      setElapsedMs(Date.now() - startedAt)
-    }, 250)
-
-    return () => clearInterval(t)
-  }, [isRunning, startedAt])
-
-  const formatted = useMemo(() => formatDuration(elapsedMs), [elapsedMs])
-
-  const onPleaseWait = () => {
-    setCoins((c) => c + 1)
-
-    if (!isRunning) {
-      // Resume from the current elapsed time
-      setStartedAt(Date.now() - elapsedMs)
-      setIsRunning(true)
-      toast.success('Building your app…', {
-        description: "Hang tight — we're setting everything up.",
-      })
-      return
+  const navigate = useNavigate();
+  const [isUploading, setIsUploading] = useState(false);
+  const [githubUrl, setGithubUrl] = useState('');
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length === 0) return;
+    setIsUploading(true);
+    const toastId = toast.loading('Reading repository contents...');
+    try {
+      const sessionId = crypto.randomUUID();
+      // In a real implementation, we'd use JSZip to read the files
+      // For Phase 1, we simulate the flow
+      toast.info('Analyzing structure...', { id: toastId });
+      const response = await fetch(`/api/analyze/${sessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          files: acceptedFiles.map(f => ({ name: f.name, size: f.size, type: f.type })) 
+        }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        toast.success('Analysis complete!', { id: toastId });
+        navigate(`/?session=${sessionId}`);
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      toast.error('Scan failed: ' + (error as Error).message, { id: toastId });
+    } finally {
+      setIsUploading(false);
     }
-
-    setIsRunning(false)
-    toast.info('Still working…', {
-      description: 'You can come back in a moment.',
-    })
-  }
-
-  const onReset = () => {
-    setCoins(0)
-    setIsRunning(false)
-    setStartedAt(null)
-    setElapsedMs(0)
-    toast('Reset complete')
-  }
-
-  const onAddCoin = () => {
-    setCoins((c) => c + 1)
-    toast('Coin added')
-  }
-
+  }, [navigate]);
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { 'application/zip': ['.zip'] },
+    multiple: false
+  });
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-      <ThemeToggle />
-      <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-
-      <div className="text-center space-y-8 relative z-10 animate-fade-in w-full">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-            <Sparkles className="w-8 h-8 text-white rotating" />
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="py-8 md:py-10 lg:py-12 min-h-screen flex flex-col justify-center items-center relative overflow-hidden">
+        <ThemeToggle />
+        <div className="absolute inset-0 bg-gradient-mesh opacity-5 dark:opacity-10 pointer-events-none" />
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="text-center space-y-8 z-10 w-full max-w-4xl"
+        >
+          <div className="flex justify-center mb-6">
+            <div className="w-20 h-20 rounded-3xl bg-gradient-primary flex items-center justify-center shadow-glow-lg floating">
+              <Sparkles className="w-10 h-10 text-white rotating" />
+            </div>
           </div>
-        </div>
-
-        <div className="space-y-3">
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
-        </div>
-
-        {HAS_TEMPLATE_DEMO ? (
-          <div className="max-w-5xl mx-auto text-left">
-            <TemplateDemo />
+          <div className="space-y-4">
+            <h1 className="text-5xl md:text-7xl font-display font-bold tracking-tight text-balance">
+              Understand any <span className="text-gradient">Codebase</span> in seconds
+            </h1>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto text-pretty">
+              Transform messy repositories into interactive architectural maps, technical documentation, and AI-powered insights.
+            </p>
           </div>
-        ) : (
-          <>
-            <div className="flex justify-center gap-4">
-              <Button
-                size="lg"
-                onClick={onPleaseWait}
-                className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-                aria-live="polite"
-              >
-                Please Wait
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div>
-                Time elapsed:{' '}
-                <span className="font-medium tabular-nums text-foreground">{formatted}</span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
+            <Card 
+              {...getRootProps()}
+              className={cn(
+                "p-8 border-2 border-dashed transition-all cursor-pointer group hover:border-primary/50 bg-card/50 backdrop-blur-sm",
+                isDragActive ? "border-primary bg-primary/5" : "border-border"
+              )}
+            >
+              <input {...getInputProps()} />
+              <div className="flex flex-col items-center gap-4">
+                <div className="p-4 rounded-full bg-secondary group-hover:bg-primary/10 transition-colors">
+                  <Upload className="w-8 h-8 text-primary" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold">Upload ZIP</h3>
+                  <p className="text-sm text-muted-foreground">Drag & drop your repository archive</p>
+                </div>
               </div>
-              <div>
-                Coins:{' '}
-                <span className="font-medium tabular-nums text-foreground">{coins}</span>
+            </Card>
+            <Card className="p-8 border border-border bg-card/50 backdrop-blur-sm flex flex-col justify-center">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-secondary">
+                    <LinkIcon className="w-5 h-5 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold">Git URL</h3>
+                </div>
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="https://github.com/user/repo" 
+                    value={githubUrl}
+                    onChange={(e) => setGithubUrl(e.target.value)}
+                    className="bg-secondary/50"
+                  />
+                  <Button disabled={!githubUrl}>
+                    <Search className="w-4 h-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Public repositories only for now</p>
               </div>
-            </div>
-
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onReset}>
-                Reset
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddCoin}>
-                Add Coin
-              </Button>
-            </div>
-          </>
-        )}
+            </Card>
+          </div>
+          <div className="flex flex-wrap justify-center gap-8 mt-16 pt-8 border-t border-border/50">
+            {[
+              { icon: Zap, label: "Instant Analysis", desc: "RIE Engine v1.0" },
+              { icon: Shield, label: "Private & Secure", desc: "In-memory processing" },
+              { icon: ArrowRight, label: "Interactive Docs", desc: "Auto-generated" }
+            ].map((feature, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <feature.icon className="w-5 h-5 text-primary" />
+                <div className="text-left">
+                  <p className="text-sm font-semibold">{feature.label}</p>
+                  <p className="text-xs text-muted-foreground">{feature.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+        <footer className="mt-20 text-sm text-muted-foreground text-center">
+          <p>Important Note: There is a limit on AI requests across all user apps in a given time period.</p>
+          <p className="mt-2">Powered by Cloudflare Workers & Durable Objects</p>
+        </footer>
       </div>
-
-      <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-        <p>Powered by Cloudflare</p>
-      </footer>
-
-      <Toaster richColors closeButton />
+      <Toaster richColors position="bottom-right" />
     </div>
-  )
+  );
+}
+function cn(...inputs: any[]) {
+  return inputs.filter(Boolean).join(' ');
 }

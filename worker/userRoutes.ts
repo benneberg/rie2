@@ -201,7 +201,25 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
             return c.json({ 
                 success: false, 
                 error: 'Failed to clear all sessions' 
-            }, { status: 500 });
+            }, { status: 500 });        }
+    });
+    /**
+     * Trigger analysis for a session
+     */
+    app.post('/api/analyze/:sessionId', async (c) => {
+        try {
+            const sessionId = c.req.param('sessionId');
+            const body = await c.req.json();
+            const agent = await getAgentByName<Env, ChatAgent>(c.env.CHAT_AGENT, sessionId);
+            
+            const response = await agent.fetch(new Request(`http://agent/analyze`, {
+                method: 'POST',
+                body: JSON.stringify(body)
+            }));
+            
+            return response;
+        } catch (error) {
+            return c.json({ success: false, error: String(error) }, 500);
         }
     });
 

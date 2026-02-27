@@ -1,183 +1,118 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { StatsCard } from '@/components/rie/StatsCard';
+import { FileTree } from '@/components/rie/FileTree';
 import { RepositoryMetadata } from '@/lib/rie-types';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Fingerprint, Brain, Target, History, Loader2, Code2, Layers } from 'lucide-react';
+import { Files, Code2, Database, Activity } from 'lucide-react';
 import { chatService } from '@/lib/chat';
-import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
-import { RiskHeatmap, RiskRadarChart } from '@/components/rie/DashboardCharts';
-import { generateV2Spec } from '@/lib/specs-generator';
-import { DriftComparison } from '@/components/rie/DriftComparison';
 export function DashboardPage() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const sessionId = searchParams.get('session');
   const [metadata, setMetadata] = useState<RepositoryMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isFixing, setIsFixing] = useState<string | null>(null);
-  const [showDrift, setShowDrift] = useState(false);
-  const fetchMetadata = useCallback(async () => {
+  useEffect(() => {
+    if (sessionId) {
+      chatService.switchSession(sessionId);
+      fetchMetadata();
+    }
+  }, [sessionId]);
+  const fetchMetadata = async () => {
     try {
       const response = await chatService.getMessages();
       if (response.success && response.data?.metadata) {
-        setMetadata(response.data.metadata);
+        setMetadata(response.data.metadata as any);
       }
+    } catch (error) {
+      console.error('Failed to fetch metadata:', error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
-  useEffect(() => {
-    if (sessionId) { chatService.switchSession(sessionId); fetchMetadata(); }
-    else navigate('/');
-  }, [sessionId, navigate, fetchMetadata]);
-  const handleApplyFix = async (issueId: string) => {
-    setIsFixing(issueId);
-    const toastId = toast.loading('EXECUTING_REMEDIATION_STRATEGY...');
-    try {
-      const res = await fetch(`/api/chat/${sessionId}/apply-fix`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issueId })
-      });
-      if (res.ok) {
-        toast.success('DEBT_REDUCED_SUCCESSFULLY', { id: toastId });
-        await fetchMetadata();
-      }
-    } catch {
-      toast.error('REMEDIATION_FAILED', { id: toastId });
-    } finally {
-      setIsFixing(null);
-    }
   };
-  if (isLoading) return <AppLayout container><Skeleton className="h-[600px] w-full glass" /></AppLayout>;
-  if (!metadata) return <AppLayout container><div className="text-center py-20 opacity-20 uppercase">No session context</div></AppLayout>;
+  if (isLoading) {
+    return (
+      <AppLayout container>
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}
+          </div>
+          <Skeleton className="h-[500px] w-full rounded-xl" />
+        </div>
+      </AppLayout>
+    );
+  }
+  if (!metadata) {
+    return (
+      <AppLayout container>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-4">
+          <Activity className="w-12 h-12 text-muted-foreground animate-pulse" />
+          <h2 className="text-2xl font-semibold">No active analysis session</h2>
+          <p className="text-muted-foreground">Upload a repository from the home page to start.</p>
+        </div>
+      </AppLayout>
+    );
+  }
   return (
     <AppLayout container>
-      <div className="space-y-12">
-        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 animate-reveal">
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2 items-center">
-              <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] font-bold uppercase tracking-widest">v2.0_CORE_SPEC</Badge>
-              <Badge variant="outline" className="text-[10px] font-bold tracking-widest uppercase">{metadata.primaryLanguage}</Badge>
-            </div>
-            <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-none">{metadata.name}</h1>
-          </div>
-          <div className="flex gap-4">
-            <Button variant="outline" onClick={() => setShowDrift(!showDrift)} className={cn("btn-brutal-dark gap-2", showDrift && "bg-primary/10 border-primary/40")}>
-              <History className="w-4 h-4" /> Drift Analysis
-            </Button>
-            <Button variant="outline" onClick={() => generateV2Spec(metadata)} className="btn-brutal-dark">Export Spec</Button>
-            <Button onClick={() => navigate(`/studio?session=${sessionId}`)} className="btn-brutal-amber">Studio</Button>
-          </div>
+      <div className="space-y-8 animate-fade-in">
+        <header className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">{metadata.name}</h1>
+          <p className="text-muted-foreground">Repository Insights Dashboard</p>
         </header>
-        <AnimatePresence>
-          {showDrift && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-              <DriftComparison current={metadata} baseline={metadata.baseline} onClose={() => setShowDrift(false)} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          <Card className="glass border-l-4 border-l-emerald-500 lg:col-span-2">
-            <CardContent className="p-8 space-y-4">
-              <div className="flex items-center gap-3">
-                <Brain className="w-5 h-5 text-emerald-500" />
-                <h3 className="text-[11px] font-black uppercase tracking-widest">Project Philosophy</h3>
-              </div>
-              <p className="text-sm font-medium leading-relaxed italic opacity-80">"{metadata.philosophy?.purpose}"</p>
-              <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/5">
-                <div>
-                  <span className="text-[9px] font-bold uppercase opacity-30 block">Complexity</span>
-                  <span className="text-[10px] font-mono uppercase flex items-center gap-1"><Code2 className="w-3 h-3" /> {metadata.totalSymbols} symbols</span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-bold uppercase opacity-30 block">Positioning</span>
-                  <span className="text-[10px] font-mono uppercase truncate">{metadata.philosophy?.positioning}</span>
-                </div>
-                <div>
-                  <span className="text-[9px] font-bold uppercase opacity-30 block">Evolution</span>
-                  <span className="text-[10px] font-mono uppercase">{metadata.philosophy?.evolution}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="glass border-l-4 border-l-amber-500">
-            <CardContent className="p-8 flex flex-col items-center justify-center text-center">
-              <div className="flex items-center gap-2 mb-4">
-                <Fingerprint className="w-4 h-4 text-amber-500" />
-                <h3 className="text-[10px] font-black uppercase tracking-widest">Grounding</h3>
-              </div>
-              <div className="text-6xl font-stats text-amber-500">{metadata.validation?.categories.grounding || 0}%</div>
-              <span className="text-[9px] font-mono uppercase opacity-40 mt-2">Claim Integrity</span>
-            </CardContent>
-          </Card>
-          <Card className="glass border-l-4 border-l-cyan-500">
-            <CardContent className="p-8 flex flex-col items-center justify-center text-center">
-               <div className="flex items-center gap-2 mb-4">
-                <Target className="w-4 h-4 text-cyan-500" />
-                <h3 className="text-[10px] font-black uppercase tracking-widest">Strategy</h3>
-              </div>
-              <div className="text-6xl font-stats text-cyan-500">{metadata.roadmap?.length || 0}</div>
-              <span className="text-[9px] font-mono uppercase opacity-40 mt-2">Target Milestones</span>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatsCard 
+            label="Total Files" 
+            value={metadata.totalFiles.toString()} 
+            icon={<Files className="w-4 h-4" />} 
+          />
+          <StatsCard 
+            label="Main Language" 
+            value={metadata.primaryLanguage} 
+            icon={<Code2 className="w-4 h-4" />} 
+          />
+          <StatsCard 
+            label="Project Size" 
+            value={`${(metadata.totalSize / 1024).toFixed(1)} KB`} 
+            icon={<Database className="w-4 h-4" />} 
+          />
+          <StatsCard 
+            label="Languages" 
+            value={metadata.languages.length.toString()} 
+            icon={<Activity className="w-4 h-4" />} 
+          />
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-8 space-y-8">
-             <div className="glass shadow-brutal-dark overflow-hidden flex flex-col min-h-[500px]">
-              <div className="p-6 border-b border-white/5 bg-white/5 flex items-center justify-between">
-                <div className="flex items-center gap-2 font-display font-bold uppercase text-xs">
-                  <Layers className="w-4 h-4 text-primary" /> Risk Hotspot Mapping
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Card className="lg:col-span-2 overflow-hidden bg-card/50 backdrop-blur-sm border-border">
+            <CardHeader>
+              <CardTitle>Architecture Map</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FileTree structure={metadata.structure} />
+            </CardContent>
+          </Card>
+          <Card className="bg-card/50 backdrop-blur-sm border-border">
+            <CardHeader>
+              <CardTitle>Language DNA</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {metadata.languages.map((lang) => (
+                <div key={lang.language} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="font-medium">{lang.language}</span>
+                    <span className="text-muted-foreground">{lang.percentage}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-secondary rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-primary transition-all duration-1000" 
+                      style={{ width: `${lang.percentage}%` }}
+                    />
+                  </div>
                 </div>
-                <Badge variant="outline" className="text-[8px] font-mono">HEATMAP_v2.0</Badge>
-              </div>
-              <div className="flex-1 p-6 flex items-center justify-center overflow-hidden">
-                 <RiskHeatmap nodes={metadata.validation?.heatmap || []} />
-              </div>
-            </div>
-          </div>
-          <div className="lg:col-span-4">
-             <Card className="glass h-full border-l-4 border-l-primary shadow-brutal-dark">
-              <CardContent className="p-0 flex flex-col h-full max-h-[600px]">
-                <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                  <h3 className="font-display font-bold uppercase tracking-widest text-xs">Validation Issues</h3>
-                  <Badge className="bg-red-500/20 text-red-400">{metadata.validation?.issues.length}</Badge>
-                </div>
-                <div className="flex-1 overflow-y-auto divide-y divide-white/5 scrollbar-thin">
-                  {metadata.validation?.issues.map((issue) => (
-                    <div key={issue.id} className="p-6 space-y-3 group hover:bg-white/5 transition-colors">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className={cn("w-4 h-4 mt-0.5", issue.severity === 'critical' ? 'text-red-500' : 'text-amber-500')} />
-                        <div className="flex-1">
-                          <p className="text-[11px] font-bold uppercase leading-tight">{issue.message}</p>
-                          <div className="mt-3 space-y-2">
-                            <p className="text-[10px] font-mono text-white/50 leading-relaxed italic">{issue.suggestion}</p>
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleApplyFix(issue.id)}
-                              disabled={isFixing === issue.id}
-                              className="h-8 w-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-black"
-                            >
-                              {isFixing === issue.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Execute Fix_'}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {!metadata.validation?.issues.length && (
-                    <div className="p-20 text-center opacity-20 font-mono text-xs uppercase tracking-widest">Zero issues found</div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </AppLayout>
