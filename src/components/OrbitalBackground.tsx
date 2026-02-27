@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 export function OrbitalBackground() {
   return (
     <div className="fixed inset-0 z-[-1] pointer-events-none overflow-hidden bg-[#070911]">
-      <svg className="w-full h-full opacity-20" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
+      <motion.svg className="w-full h-full opacity-20" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg">
         <motion.ellipse
           cx="500" cy="500" rx="400" ry="150"
           fill="none" stroke="#f59e0b" strokeWidth="0.5"
@@ -28,7 +28,7 @@ export function OrbitalBackground() {
           <circle cx="800" cy="700" r="0.5" fill="#fff" />
           <circle cx="400" cy="800" r="0.5" fill="#fff" />
         </g>
-      </svg>
+      </motion.svg>
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#070911]/50 to-[#070911]" />
     </div>
   );
