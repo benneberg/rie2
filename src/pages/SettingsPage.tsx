@@ -23,7 +23,11 @@ export function SettingsPage() {
     llmAugmentation: true,
     maxFileSize: 10 * 1024 * 1024,
     aiModel: 'gpt-4o-mini',
-    maxTokens: 4000
+    maxTokens: 4000,
+    maxDepth: 10,
+    temperature: 0.7,
+    outputDir: '.rie',
+    strictValidation: false
   });
   const [rawConfig, setRawConfig] = useState('');
   const loadConfig = useCallback(async () => {
@@ -62,9 +66,9 @@ export function SettingsPage() {
         throw new Error('SERVER_REJECTED_CONFIG');
       }
     } catch (err) {
-      toast.error('INVALID_CONFIGURATION_STRUCTURE', { 
-        id: toastId, 
-        description: 'Ensure JSON is valid and matches RIEConfig schema.' 
+      toast.error('INVALID_CONFIGURATION_STRUCTURE', {
+        id: toastId,
+        description: 'Ensure JSON is valid and matches RIEConfig schema.'
       });
     }
   };
@@ -119,9 +123,9 @@ export function SettingsPage() {
                   </div>
                   <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
                     <span className="text-[10px] font-black uppercase tracking-widest">Context_Injection</span>
-                    <Switch 
-                      checked={config.llmAugmentation} 
-                      onCheckedChange={(v) => updateField({ llmAugmentation: v })} 
+                    <Switch
+                      checked={config.llmAugmentation}
+                      onCheckedChange={(v) => updateField({ llmAugmentation: v })}
                     />
                   </div>
                 </CardContent>

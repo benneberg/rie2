@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/rie/StatsCard';
 import { DependencyGraph } from '@/components/rie/DependencyGraph';
@@ -73,7 +74,6 @@ export function DashboardPage() {
             <Button onClick={() => navigate(`/settings?session=${sessionId}`)} className="btn-brutal-amber">Configure_Engine</Button>
           </div>
         </header>
-        {/* Weighted Categories */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {report && Object.entries(report.categories).map(([cat, score]) => (
             <Card key={cat} className="glass overflow-hidden border-b-2 border-b-primary/20">
@@ -83,18 +83,17 @@ export function DashboardPage() {
                   <div className={cn("text-2xl font-stats", scoreColor(score))}>{score}%</div>
                 </div>
                 <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                  <motion.div 
+                  <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: `${score}%` }}
                     transition={{ duration: 1.5, ease: "easeOut" }}
-                    className={cn("h-full", score > 85 ? 'bg-emerald-500' : score > 60 ? 'bg-amber-500' : 'bg-red-500')} 
+                    className={cn("h-full", score > 85 ? 'bg-emerald-500' : score > 60 ? 'bg-amber-500' : 'bg-red-500')}
                   />
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-        {/* Strategic Recommendations */}
         {report?.recommendations && report.recommendations.length > 0 && (
           <div className="p-6 bg-primary/5 border border-primary/20 rounded-xl space-y-4">
             <div className="flex items-center gap-2">
@@ -112,7 +111,6 @@ export function DashboardPage() {
         )}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
-            {/* Heatmap Matrix */}
             <Card className="glass border-border shadow-brutal-dark">
               <CardContent className="p-6">
                 <div className="flex justify-between items-center mb-8">
@@ -127,7 +125,7 @@ export function DashboardPage() {
                     {report?.heatmap.map((node, i) => (
                       <Tooltip key={i}>
                         <TooltipTrigger asChild>
-                          <div 
+                          <div
                             className={cn(
                               "aspect-square rounded border transition-all cursor-help flex items-center justify-center font-mono text-[8px] font-bold p-1 overflow-hidden text-center",
                               node.riskLevel === 'critical' ? 'bg-red-500/60 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]' :

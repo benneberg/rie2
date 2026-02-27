@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { chatService } from '@/lib/chat';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -170,8 +171,8 @@ export function DocumentationStudio() {
   };
   if (isLoading) return <AppLayout container><Skeleton className="h-[600px] glass" /></AppLayout>;
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="py-8 md:py-10 lg:py-12 space-y-8 flex flex-col min-h-screen">
+    <AppLayout container>
+      <div className="space-y-8 flex flex-col min-h-screen">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={() => navigate(`/dashboard?session=${sessionId}`)}>
@@ -243,7 +244,6 @@ export function DocumentationStudio() {
                 </div>
               </ScrollArea>
             </Card>
-            {/* Terminal CLI */}
             <div className="bg-zinc-950 rounded-xl border border-white/10 overflow-hidden flex flex-col shadow-brutal-dark h-60">
               <div className="bg-zinc-900 px-4 py-2 border-b border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-[9px] font-mono font-bold text-zinc-500 tracking-[0.2em] uppercase">
@@ -277,6 +277,6 @@ export function DocumentationStudio() {
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   );
 }
