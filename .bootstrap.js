@@ -84,7 +84,8 @@ function runSetupCommands() {
     "bun add remark-gfm@^4.0.0",
     "bun add mermaid@^10.9.2",
     "bun add zod",
-    "bun add @types/react-dom"
+    "bun add @types/react-dom",
+    "bun add jszip"
 ];
     
     if (commands.length === 0) {
