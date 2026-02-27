@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { chatService } from '@/lib/chat';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 export function DocumentationStudio() {
   const [searchParams] = useSearchParams();
