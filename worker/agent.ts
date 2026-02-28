@@ -54,6 +54,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     if (method === 'POST' && path === '/analyze') return this.handleAnalyze(await request.json());
     if (method === 'POST' && path === '/apply-fix') return this.handleApplyFix(await request.json());
     if (method === 'POST' && path === '/update-config') return this.handleUpdateConfig(await request.json());
+    if (method === 'POST' && path === '/save-docs') return this.handleSaveDocs(await request.json());
     if (method === 'POST' && path === '/chat') return this.handleChatMessage(await request.json());
     if (method === 'POST' && path === '/generate-docs') return this.handleGenerateDocs(await request.json());
     if (method === 'POST' && path === '/create-baseline') return this.handleCreateBaseline();
@@ -118,6 +119,14 @@ export class ChatAgent extends Agent<Env, ChatState> {
     this.setState({ ...this.state, metadata });
     return Response.json({ success: true, metadata });
   }
+  private async handleSaveDocs(body: { documentation: Record<string, string> }): Promise<Response> {
+    if (!this.state.metadata) return Response.json({ success: false }, { status: 400 });
+    const metadata = { ...this.state.metadata };
+    metadata.documentation = { ...(metadata.documentation || {}), ...body.documentation };
+    this.setState({ ...this.state, metadata });
+    return Response.json({ success: true });
+  }
+
   private async handleApplyFix(body: { issueId: string }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false }, { status: 400 });
     const updatedMetadata = JSON.parse(JSON.stringify(this.state.metadata));
@@ -153,13 +162,13 @@ export class ChatAgent extends Agent<Env, ChatState> {
         const writer = writable.getWriter();
         const encoder = createEncoder();
         (async () => {
-          const res = await this.chatHandler!.processMessage(message, this.state.messages, (chunk) => writer.write(encoder.encode(chunk)));
+          const res = await this.chatHandler!.processMessage(message, this.state.messages, (chunk) => writer.write(encoder.encode(chunk)), this.state.metadata);
           this.setState({ ...this.state, messages: [...this.state.messages, createMessage('assistant', res.content)], isProcessing: false });
           writer.close();
         })();
         return createStreamResponse(readable);
       }
-      const res = await this.chatHandler!.processMessage(message, this.state.messages);
+      const res = await this.chatHandler!.processMessage(message, this.state.messages, undefined, this.state.metadata);
       this.setState({ ...this.state, messages: [...this.state.messages, createMessage('assistant', res.content)], isProcessing: false });
       return Response.json({ success: true, data: this.state });
     } catch {

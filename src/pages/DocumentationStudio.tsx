@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { FileText, ChevronLeft, Terminal as TerminalIcon, Eye, Zap, Code, ShieldCheck, DownloadCloud, Sparkles, CheckCircle2, Circle, LayoutPanelLeft } from 'lucide-react';
+import JSZip from 'jszip';
+import { FileText, ChevronLeft, Terminal as TerminalIcon, Eye, Zap, Code, ShieldCheck, DownloadCloud, Sparkles, CheckCircle2, Circle, LayoutPanelLeft, Save, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -154,6 +155,28 @@ export function DocumentationStudio() {
       }, 1000);
     }
   };
+  const handleZipExport = async () => {
+    addLog('rie: initializing zip archiver...', 'info');
+    setIsExporting(true);
+    try {
+      const zip = new JSZip();
+      Object.entries(docs).forEach(([name, content]) => {
+        zip.file(name, content);
+      });
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `archlens-artifacts-${sessionId?.slice(0, 8)}.zip`;
+      a.click();
+      addLog('rie: multi-artifact zip generated.', 'success');
+    } catch (e) {
+      addLog('rie: zip generation failed.', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const generateDoc = async (docType: string) => {
     setIsGenerating(true);
     addLog(`rie: synthesizing artifact: ${docType}...`, 'info');
@@ -175,6 +198,17 @@ export function DocumentationStudio() {
       setIsGenerating(false);
     }
   };
+  const saveManualEdits = async () => {
+    addLog('rie: committing documentation state...', 'info');
+    const res = await chatService.saveDocumentation(docs);
+    if (res.success) {
+      addLog('rie: documentation persistence confirmed.', 'success');
+      toast.success('DOCUMENTATION_SAVED');
+    } else {
+      addLog('rie: persistence error.', 'error');
+    }
+  };
+
   const exportGitHubAction = () => {
     // Fixed: Escape ${{ }} by breaking the string or using placeholders to avoid Vite parser conflict
     const workflow = `name: ArchLens Architectural Guardrail
@@ -212,6 +246,9 @@ jobs:
             </div>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={handleZipExport} className="btn-brutal-dark">
+              <Package className="w-4 h-4 mr-2" /> Export All (.zip)
+            </Button>
             <Button onClick={handleHTMLReportExport} className="btn-brutal-amber">
               <Code className="w-4 h-4 mr-2" /> HTML Report
             </Button>
@@ -271,6 +308,9 @@ jobs:
               <div className="flex items-center justify-between px-6 py-3 border-b bg-white/5">
                 <span className="font-mono text-[10px] font-bold text-muted-foreground tracking-widest uppercase">{activeDoc}</span>
                 <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="h-6 text-[8px] font-bold uppercase px-2 hover:text-primary" onClick={saveManualEdits}>
+                    <Save className="w-3 h-3 mr-1" /> Save_State
+                  </Button>
                   <Button variant="ghost" size="sm" className="h-6 text-[8px] font-bold uppercase px-2" onClick={() => setShowTerminal(!showTerminal)}>
                     {showTerminal ? 'Hide_Terminal' : 'Show_Terminal'}
                   </Button>

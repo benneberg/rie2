@@ -1,17 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useId } from 'react';
 import mermaid from 'mermaid';
 import { DependencyEdge, GraphType } from '@/lib/rie-types';
 import { Button } from '@/components/ui/button';
-import { Download, Maximize2, Share2, Filter, Copy } from 'lucide-react';
+import { Download, Maximize2, Share2, Filter, Copy, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 interface DependencyGraphProps {
   dependencies: DependencyEdge[];
 }
 export function DependencyGraph({ dependencies }: DependencyGraphProps) {
+  const graphId = useId().replace(/:/g, '');
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = useState<string>('');
   const [graphType, setGraphType] = useState<GraphType>('module');
+  const [isRendering, setIsRendering] = useState(false);
   useEffect(() => {
     mermaid.initialize({
       startOnLoad: false,
@@ -33,8 +35,13 @@ export function DependencyGraph({ dependencies }: DependencyGraphProps) {
   }, []);
   useEffect(() => {
     const renderGraph = async () => {
-      if (containerRef.current && dependencies.length > 0) {
-        const sanitizeId = (path: string) => `node_${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      if (!containerRef.current || dependencies.length === 0) return;
+      
+      setIsRendering(true);
+      containerRef.current.innerHTML = '';
+
+      try {
+        const sanitizeId = (path: string) => `node_${path.replace(/[^a-zA-Z0-9]/g, '_')}_${graphId}`;
         let displayDeps = dependencies;
         if (graphType === 'package') {
           // Heuristic: aggregate by parent directory
@@ -55,14 +62,14 @@ export function DependencyGraph({ dependencies }: DependencyGraphProps) {
           return `  ${sourceId}["${edge.source}"] --> ${targetId}["${edge.target}"]`;
         }).join('\n');
         const graphDefinition = `graph TD\n${edges}`;
-        const id = `mermaid-${Date.now()}`;
-        try {
-          const { svg } = await mermaid.render(id, graphDefinition);
-          if (containerRef.current) containerRef.current.innerHTML = svg;
-          setSvgContent(svg);
-        } catch (err) {
-          console.error('Mermaid error:', err);
-        }
+        const { svg } = await mermaid.render(`render_${graphId}`, graphDefinition);
+        
+        if (containerRef.current) containerRef.current.innerHTML = svg;
+        setSvgContent(svg);
+      } catch (err) {
+        console.error('Mermaid error:', err);
+      } finally {
+        setIsRendering(false);
       }
     };
     renderGraph();
@@ -80,6 +87,12 @@ export function DependencyGraph({ dependencies }: DependencyGraphProps) {
   );
   return (
     <div className="relative group p-6">
+      {isRendering && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/50 backdrop-blur-sm">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="ml-3 text-[10px] font-mono uppercase tracking-widest">Generating_Topology...</span>
+        </div>
+      )}
       <div className="absolute top-4 right-4 flex gap-2 z-20">
         <ToggleGroup type="single" value={graphType} onValueChange={(v) => v && setGraphType(v as GraphType)} className="bg-black/40 border border-white/10 p-1">
           <ToggleGroupItem value="module" className="text-[8px] font-black tracking-widest px-2 h-7 uppercase">Module</ToggleGroupItem>

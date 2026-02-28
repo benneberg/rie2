@@ -94,6 +94,14 @@ export class RIEValidator {
         suggestion: 'Define "workspaces" field in root package.json for better mapping.'
       });
     }
+    // 5.5 Summary Badge Logic
+    let summaryBadge = "NEUTRAL_SCAN";
+    if (finalScore >= 90) summaryBadge = "ELITE_ARCH";
+    else if (finalScore >= 80) summaryBadge = "HIGH_INTEGRITY";
+    else if (finalScore >= 70) summaryBadge = "STABLE_BUILD";
+    else if (finalScore >= 50) summaryBadge = "DEBT_WARNING";
+    else summaryBadge = "CRITICAL_FAILURE";
+
     // 6. Weighted Scoring Calculation
     // Security: 35%, Structure: 25%, Consistency: 20%, Completeness: 20%
     const finalScore = Math.round(
@@ -102,7 +110,8 @@ export class RIEValidator {
       (rawScores.consistency * 0.20) +
       (rawScores.completeness * 0.20)
     );
-    // 7. Heatmap Generation
+    const safeScore = Math.max(0, finalScoreValue);
+// 7. Heatmap Generation
     const dirs = new Map<string, { count: number; nesting: number; coupling: number }>();
     metadata.structure.forEach(f => {
       const parts = f.path.split('/');
@@ -123,11 +132,12 @@ export class RIEValidator {
       });
     });
     return {
-      score: finalScore,
+      score: safeScore,
       categories: rawScores,
       checks,
       issues: issues.sort((a, b) => (a.severity === 'critical' ? -1 : 1)),
       heatmap,
+      summaryBadge,
       recommendations: issues.map(i => i.suggestion || ''),
       riskMetrics: {
         fanInMax,

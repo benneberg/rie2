@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { Message, ToolCall } from './types';
 import { getToolDefinitions, executeTool } from './tools';
+import { RepositoryMetadata } from '../src/lib/rie-types';
 import { ChatCompletionMessageFunctionToolCall } from 'openai/resources/index.mjs';
 export class ChatHandler {
   private client: OpenAI;
@@ -15,13 +16,14 @@ export class ChatHandler {
   async processMessage(
     message: string,
     conversationHistory: Message[],
-    onChunk?: (chunk: string) => void
+    onChunk?: (chunk: string) => void,
+    metadata?: RepositoryMetadata
   ): Promise<{
     content: string;
     toolCalls?: ToolCall[];
   }> {
     try {
-      const messages = this.buildConversationMessages(message, conversationHistory);
+      const messages = this.buildConversationMessages(message, conversationHistory, metadata);
       const toolDefinitions = await getToolDefinitions();
       if (onChunk) {
         const stream = await this.client.chat.completions.create({
@@ -32,7 +34,7 @@ export class ChatHandler {
           max_completion_tokens: 16000,
           stream: true,
         });
-        return this.handleStreamResponse(stream, message, conversationHistory, onChunk);
+        return this.handleStreamResponse(stream, message, conversationHistory, onChunk, metadata);
       }
       const completion = await this.client.chat.completions.create({
         model: this.model,
@@ -42,7 +44,7 @@ export class ChatHandler {
         max_tokens: 16000,
         stream: false
       });
-      return this.handleNonStreamResponse(completion, message, conversationHistory);
+      return this.handleNonStreamResponse(completion, message, conversationHistory, metadata);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       console.error('ChatHandler.processMessage OpenAI error:', errMsg);
@@ -56,7 +58,8 @@ export class ChatHandler {
     stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
     message: string,
     conversationHistory: Message[],
-    onChunk: (chunk: string) => void
+    onChunk: (chunk: string) => void,
+    metadata?: RepositoryMetadata
   ) {
     let fullContent = '';
     const accumulatedToolCalls: ChatCompletionMessageFunctionToolCall[] = [];
@@ -97,7 +100,7 @@ export class ChatHandler {
     }
     if (accumulatedToolCalls.length > 0) {
       const executedTools = await this.executeToolCalls(accumulatedToolCalls);
-      const finalResponse = await this.generateToolResponse(message, conversationHistory, accumulatedToolCalls, executedTools);
+      const finalResponse = await this.generateToolResponse(message, conversationHistory, accumulatedToolCalls, executedTools, metadata);
       return { content: finalResponse, toolCalls: executedTools };
     }
     return { content: fullContent };
@@ -105,7 +108,8 @@ export class ChatHandler {
   private async handleNonStreamResponse(
     completion: OpenAI.Chat.Completions.ChatCompletion,
     message: string,
-    conversationHistory: Message[]
+    conversationHistory: Message[],
+    metadata?: RepositoryMetadata
   ) {
     const responseMessage = completion.choices[0]?.message;
     if (!responseMessage) {
@@ -121,7 +125,8 @@ export class ChatHandler {
       message,
       conversationHistory,
       responseMessage.tool_calls,
-      toolCalls
+      toolCalls,
+      metadata
     );
     return { content: finalResponse, toolCalls };
   }
@@ -154,14 +159,17 @@ export class ChatHandler {
     userMessage: string,
     history: Message[],
     openAiToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[],
-    toolResults: ToolCall[]
+    toolResults: ToolCall[],
+    metadata?: RepositoryMetadata
   ): Promise<string> {
     const followUpCompletion = await this.client.chat.completions.create({
       model: this.model,
       messages: [
-        { 
-          role: 'system', 
-          content: 'You are the ArchLens Senior Architect. You provide sharp, technical, and actionable insights about software repositories. Maintain a professional yet slightly brutalist persona that values code clarity and structural integrity.' 
+        {
+          role: 'system',
+          content: `You are the ArchLens Senior Architect. You provide sharp, technical insights.
+          ${metadata ? `CONTEXT: Project: ${metadata.name}, Lang: ${metadata.primaryLanguage}, Health: ${metadata.validation?.score}%, Files: ${metadata.totalFiles}.` : ''}
+          Maintain a professional yet slightly brutalist persona.`
         },
         ...history.slice(-3).map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: userMessage },
@@ -180,16 +188,20 @@ export class ChatHandler {
     });
     return followUpCompletion.choices[0]?.message?.content || 'Tool results processed successfully.';
   }
-  private buildConversationMessages(userMessage: string, history: Message[]) {
+  private buildConversationMessages(userMessage: string, history: Message[], metadata?: RepositoryMetadata) {
+    const contextString = metadata ? `
+    PROJECT_CONTEXT:
+    Name: ${metadata.name}
+    Primary Language: ${metadata.primaryLanguage}
+    Health Score: ${metadata.validation?.score}% (${metadata.validation?.summaryBadge})
+    Total Files: ${metadata.totalFiles}
+    ` : '';
+
     return [
       {
         role: 'system' as const,
-        content: `You are the ArchLens AI, a world-class Software Architect and System Analyst. 
-        Your goal is to help developers understand, optimize, and document their codebase.
-        You have deep expertise in design patterns, modularity, and technical debt assessment.
-        Always provide specific, data-driven insights based on the repository metadata provided in the CONTEXT.
-        If the health score is low, identify why. If dependencies are messy, suggest modularization.
-        Be practical, concise, and technically rigorous.`
+        content: `You are the ArchLens AI, a world-class Software Architect. ${contextString}
+        Use the provided PROJECT_CONTEXT to answer user queries accurately. If asked about architecture, refer to the metadata.`
       },
       ...history.slice(-5).map(m => ({
         role: m.role,
