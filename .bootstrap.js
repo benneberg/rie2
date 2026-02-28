@@ -85,7 +85,7 @@ function runSetupCommands() {
     "bun add mermaid@^10.9.2",
     "bun add zod",
     "bun add @types/react-dom",
-    "bun add jszip",
+    "bun add jszip recharts lucide-react framer-motion clsx tailwind-merge",
     "bun add recharts"
 ];
     
