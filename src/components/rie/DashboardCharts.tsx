@@ -1,8 +1,8 @@
 import React from 'react';
-import { 
-  PieChart, Pie, Cell, ResponsiveContainer, Tooltip, 
+import {
+  PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid
+  BarChart, Bar, XAxis, YAxis
 } from 'recharts';
 import { LanguageDetection, DependencyEdge } from '@/lib/rie-types';
 const COLORS = ['#f59e0b', '#00e5ff', '#10b981', '#6366f1', '#ec4899', '#8b5cf6'];
@@ -19,12 +19,12 @@ export function LanguageDistributionChart({ languages }: { languages: LanguageDe
     );
   }
   return (
-    <ResponsiveContainer width="100%" height="100%" aspect={1}>
+    <ResponsiveContainer width="100%" height="100%">
       <PieChart>
         <Pie
           data={data}
-          innerRadius={60}
-          outerRadius={80}
+          innerRadius={50}
+          outerRadius={70}
           paddingAngle={5}
           dataKey="value"
           stroke="none"
@@ -55,10 +55,10 @@ export function RiskRadarChart({ categories }: { categories: Record<string, numb
     );
   }
   return (
-    <ResponsiveContainer width="100%" height="100%" aspect={1}>
-      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data}>
+    <ResponsiveContainer width="100%" height="100%">
+      <RadarChart cx="50%" cy="50%" outerRadius="65%" data={data}>
         <PolarGrid stroke="#181e30" />
-        <PolarAngleAxis dataKey="subject" tick={{ fill: '#dde4f4', fontSize: 8, fontFamily: 'DM Mono' }} />
+        <PolarAngleAxis dataKey="subject" tick={{ fill: '#dde4f4', fontSize: 7, fontFamily: 'DM Mono' }} />
         <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
         <Radar
           name="Health"
@@ -96,18 +96,18 @@ export function FanInFanOutChart({ dependencies }: { dependencies: DependencyEdg
     );
   }
   return (
-    <ResponsiveContainer width="100%" height="100%" aspect={2}>
-      <BarChart data={chartData} layout="vertical">
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
         <XAxis type="number" hide />
         <YAxis
           dataKey="name"
           type="category"
-          width={80}
+          width={70}
           tick={{ fill: '#dde4f4', fontSize: 8, fontFamily: 'DM Mono' }}
           axisLine={false}
           tickLine={false}
         />
-        <Bar dataKey="weight" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={12} />
+        <Bar dataKey="weight" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={10} />
       </BarChart>
     </ResponsiveContainer>
   );

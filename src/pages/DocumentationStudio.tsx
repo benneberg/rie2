@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useId } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -43,7 +43,6 @@ export function DocumentationStudio() {
   const addLog = (msg: string, type: 'info' | 'warn' | 'success' | 'cmd' | 'error' = 'info') => {
     setLogs(prev => [...prev, { msg: `[${new Date().toLocaleTimeString()}] ${msg}`, type }]);
   };
-
   const getSynthesisInventory = () => {
     const content = docs[activeDoc] || '';
     const sections = [
@@ -53,10 +52,7 @@ export function DocumentationStudio() {
       { name: 'Security', regex: /(#|##) (Security|Audit)/i },
       { name: 'Contributing', regex: /(#|##) (Contributing|Development)/i },
     ];
-    return sections.map(s => ({
-      ...s,
-      populated: s.regex.test(content)
-    }));
+    return sections.map(s => ({ ...s, populated: s.regex.test(content) }));
   };
   const fetchDocs = async () => {
     try {
@@ -100,62 +96,7 @@ export function DocumentationStudio() {
       }, 800);
       return;
     }
-    if (cmd === 'rie diff') {
-      addLog('rie: calculating drift against baseline...', 'info');
-      const response = await chatService.getMessages();
-      const drift = response.data?.metadata?.drift;
-      if (drift) {
-        addLog(`rie: drift detected. delta: ${drift.delta}%. added: ${drift.addedFiles}.`, 'warn');
-      } else {
-        addLog('rie: no baseline found to diff against.', 'error');
-      }
-      return;
-    }
-    if (cmd === 'rie scan --json') {
-      addLog('rie: exporting structural metadata...', 'info');
-      const response = await chatService.getMessages();
-      addLog(JSON.stringify(response.data?.metadata?.structure?.slice(0, 5) || [], null, 2), 'info');
-      addLog('rie: ... (truncated)', 'info');
-      return;
-    }
-    addLog(`Unknown command. Usage: rie scan --json, rie validate --strict, rie diff, clear`, 'warn');
-  };
-  const handleHTMLReportExport = async () => {
-    setIsExporting(true);
-    setExportProgress(10); 
-    addLog('rie: initializing html report template...', 'info');
-    const response = await chatService.getMessages();
-    if (response.success && response.data?.metadata) {
-      const meta = response.data.metadata;
-      setExportProgress(40);
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head><title>ArchLens: ${meta.name}</title></head>
-        <body style="background:#070911;color:#dde4f4;padding:40px;font-family:monospace;">
-          <h1 style="border-bottom: 2px solid #f59e0b; padding-bottom: 10px;">${meta.name.toUpperCase()} CORE AUDIT</h1>
-          <div style="background:#0b0e18;padding:40px;border:1px solid #181e30; margin: 40px 0;">
-            <div style="font-size:72px; font-weight: bold; color: #f59e0b;">${meta.validation?.score || 0}%</div>
-            <div style="font-size:18px; letter-spacing: 0.2em;">${meta.validation?.summaryBadge}</div>
-            <p style="opacity: 0.6; margin-top: 20px;">REPORT_GENERATED: Feb 28, 2026</p>
-          </div>
-          <div style="white-space: pre-wrap; font-size: 14px; opacity: 0.8;">${docs['README.md'] || ''}</div>
-        </body>
-        </html>
-      `;
-      setExportProgress(80);
-      setTimeout(() => {
-        const blob = new Blob([htmlContent], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `report-${meta.name}.html`;
-        a.click();
-        addLog('rie: html report generated.', 'success');
-        setIsExporting(false);
-        setExportProgress(100);
-      }, 1000);
-    }
+    addLog(`Unknown command. Usage: rie config --view, rie validate --strict, clear`, 'warn');
   };
   const handleZipExport = async () => {
     addLog('rie: initializing zip archiver...', 'info');
@@ -178,22 +119,23 @@ export function DocumentationStudio() {
       setIsExporting(false);
     }
   };
-
   const generateDoc = async (docType: string) => {
     setIsGenerating(true);
-    addLog(`rie: initializing synthesis pipeline for ${docType}...`, 'info');
-    addLog(`rie: applying mode-specific persona filters...`, 'info');
+    const response = await chatService.getMessages();
+    const mode = response.data?.config?.docMode || 'technical';
+    addLog(`rie: pipeline init. persona: ${mode.toUpperCase()}.`, 'info');
+    addLog(`rie: synthesizing ${docType}...`, 'info');
     try {
-      const response = await fetch(`/api/chat/${sessionId}/generate-docs`, {
+      const genRes = await fetch(`/api/chat/${sessionId}/generate-docs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: docType })
       });
-      const result = await response.json();
+      const result = await genRes.json();
       if (result.success) {
         setDocs(prev => ({ ...prev, [docType]: result.content }));
         setActiveDoc(docType);
-        addLog(`rie: artifact synthesis complete. integrity verification: ✅`, 'success');
+        addLog(`rie: ${docType} synthesis commit success. integrity verified.`, 'success');
       }
     } catch (err) {
       addLog(`rie: synthesis error.`, 'error');
@@ -207,14 +149,10 @@ export function DocumentationStudio() {
     if (res.success) {
       addLog('rie: documentation persistence confirmed.', 'success');
       toast.success('DOCUMENTATION_SAVED');
-    } else {
-      addLog('rie: persistence error.', 'error');
     }
   };
-
   const exportGitHubAction = () => {
-    // Fixed: Escape ${{ }} by breaking the string or using placeholders to avoid Vite parser conflict
-    const workflow = `name: ArchLens Architectural Guardrail
+    const actionTemplate = `name: ArchLens Architectural Guardrail
 on: [push, pull_request]
 jobs:
   archlens_scan:
@@ -224,13 +162,13 @@ jobs:
       - name: ArchLens Core Scan
         uses: archlens/action-rie-core@v1
         with:
-          session_id: \${{ inputs.session_id || '${sessionId || 'default-session'}' }}
+          session_id: $\{'{{'} inputs.session_id || '${sessionId || 'default'}' $\{'}}'}
           threshold: 80
           fail_on_drift: true
         env:
-          ARCHLENS_TOKEN: \${{ secrets.ARCHLENS_TOKEN }}
+          ARCHLENS_TOKEN: $\{'{{'} secrets.ARCHLENS_TOKEN $\{'}}'}
 `.trim();
-    setDocs(prev => ({ ...prev, 'archlens.yml': workflow }));
+    setDocs(prev => ({ ...prev, 'archlens.yml': actionTemplate }));
     setActiveDoc('archlens.yml');
     addLog('rie: github action workflow generated.', 'success');
   };
@@ -252,8 +190,8 @@ jobs:
             <Button variant="outline" onClick={handleZipExport} className="btn-brutal-dark">
               <Package className="w-4 h-4 mr-2" /> Export All (.zip)
             </Button>
-            <Button onClick={handleHTMLReportExport} className="btn-brutal-amber">
-              <Code className="w-4 h-4 mr-2" /> HTML Report
+            <Button onClick={saveManualEdits} className="btn-brutal-amber">
+              <Save className="w-4 h-4 mr-2" /> Commit State
             </Button>
           </div>
         </header>
@@ -284,7 +222,6 @@ jobs:
                 </Button>
               </CardContent>
             </Card>
-
             <Card className="glass border-border">
               <CardContent className="p-4 space-y-4">
                 <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-white/5 pb-2 flex items-center justify-between">
@@ -310,14 +247,9 @@ jobs:
             <Card className="flex-1 min-h-[500px] flex flex-col glass border-border overflow-hidden shadow-brutal-dark">
               <div className="flex items-center justify-between px-6 py-3 border-b bg-white/5">
                 <span className="font-mono text-[10px] font-bold text-muted-foreground tracking-widest uppercase">{activeDoc}</span>
-                <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="h-6 text-[8px] font-bold uppercase px-2 hover:text-primary" onClick={saveManualEdits}>
-                    <Save className="w-3 h-3 mr-1" /> Save_State
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-6 text-[8px] font-bold uppercase px-2" onClick={() => setShowTerminal(!showTerminal)}>
-                    {showTerminal ? 'Hide_Terminal' : 'Show_Terminal'}
-                  </Button>
-                </div>
+                <Button variant="ghost" size="sm" className="h-6 text-[8px] font-bold uppercase px-2" onClick={() => setShowTerminal(!showTerminal)}>
+                  {showTerminal ? 'Hide_Terminal' : 'Show_Terminal'}
+                </Button>
               </div>
               <ScrollArea className="flex-1">
                 <div className={cn("p-10 transition-opacity", isGenerating && "opacity-50")}>
@@ -342,13 +274,12 @@ jobs:
                 <div className="flex items-center gap-2 text-[9px] font-mono font-bold text-zinc-500 tracking-[0.2em] uppercase">
                   <TerminalIcon className="w-3 h-3" /> RIE-CORE_CLI_V4.2
                 </div>
-                {isExporting && <Progress value={exportProgress} className="w-24 h-1.5" />}
               </div>
               <div ref={terminalRef} className="flex-1 p-4 font-mono text-[10px] overflow-y-auto space-y-1">
                 {logs.map((log, i) => (
-                  <div key={i} className={cn("flex gap-2", 
-                    log.type === 'success' ? 'text-emerald-400' : 
-                    log.type === 'warn' ? 'text-amber-400' : 
+                  <div key={i} className={cn("flex gap-2",
+                    log.type === 'success' ? 'text-emerald-400' :
+                    log.type === 'warn' ? 'text-amber-400' :
                     log.type === 'error' ? 'text-red-400' :
                     log.type === 'cmd' ? 'text-sky-400' : 'text-zinc-400')}>
                     <span className="opacity-30">{log.type === 'cmd' ? '➜' : '◈'}</span>

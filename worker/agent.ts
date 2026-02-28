@@ -28,6 +28,8 @@ export class ChatAgent extends Agent<Env, ChatState> {
       temperature: 0.7,
       outputDir: '.rie',
       strictValidation: false,
+      docVerbosity: 'standard',
+      docMode: 'technical',
       policy: {
         minSecurityScore: 70,
         minStructureScore: 60,
@@ -79,7 +81,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
                 const name = path.split('/').slice(1).join('/');
                 if (!name) return null;
                 let content = undefined;
-                // Extract content for critical manifest files
                 if (name === 'package.json' || name.endsWith('/package.json')) {
                   content = await f.async("string");
                 }
@@ -126,7 +127,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
     this.setState({ ...this.state, metadata });
     return Response.json({ success: true });
   }
-
   private async handleApplyFix(body: { issueId: string }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false }, { status: 400 });
     const updatedMetadata = JSON.parse(JSON.stringify(this.state.metadata));
@@ -162,9 +162,15 @@ export class ChatAgent extends Agent<Env, ChatState> {
         const writer = writable.getWriter();
         const encoder = createEncoder();
         (async () => {
-          const res = await this.chatHandler!.processMessage(message, this.state.messages, (chunk) => writer.write(encoder.encode(chunk)), this.state.metadata);
-          this.setState({ ...this.state, messages: [...this.state.messages, createMessage('assistant', res.content)], isProcessing: false });
-          writer.close();
+          try {
+            const res = await this.chatHandler!.processMessage(message, this.state.messages, (chunk) => writer.write(encoder.encode(chunk)), this.state.metadata);
+            this.setState({ ...this.state, messages: [...this.state.messages, createMessage('assistant', res.content)], isProcessing: false });
+          } catch (e) {
+             console.error('Stream worker error:', e);
+             this.setState({ ...this.state, isProcessing: false });
+          } finally {
+            writer.close();
+          }
         })();
         return createStreamResponse(readable);
       }
@@ -177,43 +183,45 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
   }
   private async handleGenerateDocs(body: { type: string }): Promise<Response> {
+    if (!this.state.metadata) {
+       return Response.json({ success: false, error: 'Metadata not available for synthesis.' }, { status: 400 });
+    }
     const verbosity = this.state.config.docVerbosity || 'standard';
+    const mode = this.state.config.docMode || 'technical';
     const metadata = this.state.metadata;
-    const badge = metadata?.validation?.summaryBadge || "N/A";
-    const issues = metadata?.validation?.issues?.map(i => `- [${i.severity.toUpperCase()}] ${i.message}`).join('\n') || "No issues.";
-
+    const badge = metadata.validation?.summaryBadge || "N/A";
+    const issues = metadata.validation?.issues?.map(i => `- [${i.severity.toUpperCase()}] ${i.message}`).join('\n') || "No issues.";
     let prompt = `Generate technical ${body.type} for the current repository. Output in clean Markdown.
+    Synthesis Persona: ${mode.toUpperCase()}
+    Verbosity Mode: ${verbosity.toUpperCase()}
     ENFORCE THE FOLLOWING STRUCTURE:
-    1. **What is ${metadata?.name || 'this project'}?**: A exactly 3-sentence plain English introduction. 
-       Avoid jargon in the first sentence.
-    2. **Validation Evidence**: 
+    1. **What is ${metadata.name || 'this project'}?**: A exactly 3-sentence plain English introduction.
+       ${mode === 'project' ? 'Focus on system philosophy and user value.' : 'Focus on technical stack and core logic.'}
+    2. **Validation Evidence**:
        - Badge: ${badge}
        - Summary of Findings:
        ${issues}
     3. **Quick Start**:
        - Prerequisites
-       - Installation: Include \`npx rie scan\` mockup if applicable.
+       - Installation: Provide exact commands for ${metadata.primaryLanguage}.
        - First Command example.
-    4. **System Architecture**: Use the following verbosity mode: ${verbosity.toUpperCase()}.
-       - If CONCISE: Use short bullet points and Mermaid diagrams only.
-       - If STANDARD: Mix technical diagrams with explanatory paragraphs.
-       - If DETAILED: Provide deep architectural narratives, interop patterns, and technical debt assessment.
-    
+    4. **System Architecture**:
+       ${mode === 'technical' 
+         ? 'Focus on structural specs, interop patterns, and implementation details.' 
+         : 'Focus on business value, logical flow, and high-level narratives.'}
+       - Detail Level: ${verbosity.toUpperCase()}.
+       ${verbosity === 'detailed' ? 'Assess technical debt and long-term scalability.' : ''}
     STRICT GUIDELINES:
-    - DO NOT include internal logs or "Studio synthesis" markers.
+    - DO NOT include internal logs or placeholders.
     - Date format: Use ISO 8601 (YYYY-MM-DD).
-    - Language context: The primary language is ${metadata?.primaryLanguage || 'Unknown'}.
-    
+    - Language context: The primary language is ${metadata.primaryLanguage || 'Unknown'}.
     Project Context:
-    - Total Files: ${metadata?.totalFiles}
-    - Structure: ${metadata?.structure?.slice(0, 20).map(s => s.path).join(', ')}...
-    - Documentation Summary: ${metadata?.documentation?.['summary'] || 'N/A'}
-    
+    - Total Files: ${metadata.totalFiles}
+    - Structure Preview: ${metadata.structure?.slice(0, 15).map(s => s.path).join(', ')}...
     Generate now:`;
-
     const res = await this.chatHandler!.processMessage(prompt, []);
-    const documentation = { ...(this.state.metadata?.documentation || {}), [body.type]: res.content };
-    this.setState({ ...this.state, metadata: { ...this.state.metadata!, documentation } });
+    const documentation = { ...(this.state.metadata.documentation || {}), [body.type]: res.content };
+    this.setState({ ...this.state, metadata: { ...this.state.metadata, documentation } });
     return Response.json({ success: true, content: res.content });
   }
 }

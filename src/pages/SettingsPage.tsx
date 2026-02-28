@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge'; import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Trash2, Save, Download, Cpu, Shield, Gavel, History } from 'lucide-react';
+import { Trash2, Save, Download, Cpu, Shield, Gavel, History, Layout } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { toast, Toaster } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,6 +28,8 @@ export function SettingsPage() {
     temperature: 0.7,
     outputDir: '.rie',
     strictValidation: false,
+    docVerbosity: 'standard',
+    docMode: 'technical',
     policy: {
       minSecurityScore: 70,
       minStructureScore: 60,
@@ -85,14 +87,12 @@ export function SettingsPage() {
     setConfig(next);
     setRawConfig(JSON.stringify(next, null, 2));
   };
-
   const updatePolicy = (policyUpdates: any) => {
     const nextPolicy = { ...(config.policy || {}), ...policyUpdates };
     const next = { ...config, policy: nextPolicy };
     setConfig(next as RIEConfig);
     setRawConfig(JSON.stringify(next, null, 2));
   };
-
   const handleExport = () => {
     const blob = new Blob([rawConfig], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -147,22 +147,39 @@ export function SettingsPage() {
                   </div>
                   <div className="space-y-4 pt-4 border-t border-white/5">
                     <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Documentation Synthesis Depth</Label>
-                    <RadioGroup 
-                      value={config.docVerbosity || 'standard'} 
+                    <RadioGroup
+                      value={config.docVerbosity || 'standard'}
                       onValueChange={(v) => updateField({ docVerbosity: v as any })}
                       className="grid grid-cols-1 gap-2"
                     >
                       <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
                         <RadioGroupItem value="concise" id="v-concise" />
-                        <Label htmlFor="v-concise" className="text-xs">Concise (Bullet points, high-level only)</Label>
+                        <Label htmlFor="v-concise" className="text-xs">Concise (High-level only)</Label>
                       </div>
                       <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
                         <RadioGroupItem value="standard" id="v-standard" />
-                        <Label htmlFor="v-standard" className="text-xs">Standard (Balanced prose and diagrams)</Label>
+                        <Label htmlFor="v-standard" className="text-xs">Standard (Balanced prose)</Label>
                       </div>
                       <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
                         <RadioGroupItem value="detailed" id="v-detailed" />
-                        <Label htmlFor="v-detailed" className="text-xs">Detailed (In-depth architectural narratives)</Label>
+                        <Label htmlFor="v-detailed" className="text-xs">Detailed (In-depth narratives)</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                  <div className="space-y-4 pt-4 border-t border-white/5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Synthesis Persona</Label>
+                    <RadioGroup
+                      value={config.docMode || 'technical'}
+                      onValueChange={(v) => updateField({ docMode: v as any })}
+                      className="grid grid-cols-1 gap-2"
+                    >
+                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                        <RadioGroupItem value="technical" id="m-technical" />
+                        <Label htmlFor="m-technical" className="text-xs font-bold">Technical (Architectural focus)</Label>
+                      </div>
+                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                        <RadioGroupItem value="project" id="m-project" />
+                        <Label htmlFor="m-project" className="text-xs font-bold">Project (Stakeholder focus)</Label>
                       </div>
                     </RadioGroup>
                   </div>
@@ -210,8 +227,8 @@ export function SettingsPage() {
                               <span>{item.label}</span>
                               <span className="text-primary">{(config.policy as any)?.[item.field] || 0}%</span>
                             </div>
-                            <Input 
-                              type="range" min="0" max="100" 
+                            <Input
+                              type="range" min="0" max="100"
                               value={(config.policy as any)?.[item.field] || 0}
                               onChange={(e) => updatePolicy({ [item.field]: parseInt(e.target.value) })}
                               className="h-1 bg-white/10"

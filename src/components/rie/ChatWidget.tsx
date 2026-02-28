@@ -12,6 +12,7 @@ export function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
+  const [streamingContent, setStreamingContent] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -25,9 +26,9 @@ export function ChatWidget() {
     }
   };
   useEffect(() => {
-    const timer = setTimeout(scrollToBottom, 100);
+    const timer = setTimeout(scrollToBottom, 50);
     return () => clearTimeout(timer);
-  }, [messages, isTyping]);
+  }, [messages, streamingContent, isTyping]);
   const loadHistory = async () => {
     const response = await chatService.getMessages();
     if (response.success && response.data) {
@@ -45,15 +46,14 @@ export function ChatWidget() {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsTyping(true);
-    let fullText = '';
+    setStreamingContent('');
     const response = await chatService.sendMessage(userMsg.content, undefined, (chunk) => {
-      fullText += chunk;
-      // Force scroll during streaming
-      scrollToBottom();
+      setStreamingContent(prev => prev + chunk);
     });
     if (response.success) {
       await loadHistory();
     }
+    setStreamingContent('');
     setIsTyping(false);
   };
   return (
@@ -105,7 +105,17 @@ export function ChatWidget() {
                         </div>
                       </div>
                     ))}
-                    {isTyping && (
+                    {streamingContent && (
+                      <div className="flex gap-3 flex-row animate-in fade-in">
+                        <div className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center shrink-0">
+                          <Bot className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="max-w-[85%] p-4 rounded-xl text-[11px] font-mono tracking-tight leading-relaxed border border-white/5 bg-white/5 text-foreground/90">
+                          {streamingContent}
+                        </div>
+                      </div>
+                    )}
+                    {isTyping && !streamingContent && (
                       <div className="flex gap-3 animate-in fade-in slide-in-from-bottom-2">
                         <div className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center shrink-0">
                           <Bot className="w-4 h-4 text-primary" />
