@@ -73,7 +73,7 @@ export function DependencyGraph({ dependencies }: DependencyGraphProps) {
       }
     };
     renderGraph();
-  }, [dependencies, graphType]);
+  }, [dependencies, graphType, graphId]);
   const copyRaw = () => {
     const sanitizeId = (path: string) => `node_${path.replace(/[^a-zA-Z0-9]/g, '_')}`;
     const edges = dependencies.map(edge => `  ${sanitizeId(edge.source)}["${edge.source}"] --> ${sanitizeId(edge.target)}["${edge.target}"]`).join('\n');

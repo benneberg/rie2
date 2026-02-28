@@ -93,6 +93,7 @@ export interface RIEConfig {
   strictValidation: boolean;
   policy?: PolicyConfig;
   docVerbosity?: 'concise' | 'standard' | 'detailed';
+  docMode?: 'technical' | 'project';
 }
 export interface RepositorySource {
   type: 'upload' | 'github';
@@ -128,15 +129,4 @@ export interface RepositoryMetadata {
   status?: 'analyzing' | 'completed' | 'failed';
   baseline?: RepositoryMetadata;
   drift?: DriftReport;
-}
-export interface ScanResult {
-  success: boolean;
-  sessionId: string;
-  metadata?: RepositoryMetadata;
-  error?: string;
-}
-export interface ReportExport {
-  html: string;
-  metadata: RepositoryMetadata;
-  generatedAt: number;
 }

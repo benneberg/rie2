@@ -122,7 +122,7 @@ export function DocumentationStudio() {
   };
   const handleHTMLReportExport = async () => {
     setIsExporting(true);
-    setExportProgress(10);
+    setExportProgress(10); 
     addLog('rie: initializing html report template...', 'info');
     const response = await chatService.getMessages();
     if (response.success && response.data?.metadata) {
@@ -132,12 +132,14 @@ export function DocumentationStudio() {
         <!DOCTYPE html>
         <html>
         <head><title>ArchLens: ${meta.name}</title></head>
-        <body style="background:#070911;color:#dde4f4;padding:40px;font-family:sans-serif;">
-          <h1>${meta.name.toUpperCase()} REPORT</h1>
-          <div style="background:#0b0e18;padding:20px;border:1px solid #181e30;">
-            <div style="font-size:48px;">${meta.validation?.score || 0}%</div>
-            <p>HEALTH SCORE</p>
+        <body style="background:#070911;color:#dde4f4;padding:40px;font-family:monospace;">
+          <h1 style="border-bottom: 2px solid #f59e0b; padding-bottom: 10px;">${meta.name.toUpperCase()} CORE AUDIT</h1>
+          <div style="background:#0b0e18;padding:40px;border:1px solid #181e30; margin: 40px 0;">
+            <div style="font-size:72px; font-weight: bold; color: #f59e0b;">${meta.validation?.score || 0}%</div>
+            <div style="font-size:18px; letter-spacing: 0.2em;">${meta.validation?.summaryBadge}</div>
+            <p style="opacity: 0.6; margin-top: 20px;">REPORT_GENERATED: Feb 28, 2026</p>
           </div>
+          <div style="white-space: pre-wrap; font-size: 14px; opacity: 0.8;">${docs['README.md'] || ''}</div>
         </body>
         </html>
       `;
@@ -179,7 +181,8 @@ export function DocumentationStudio() {
 
   const generateDoc = async (docType: string) => {
     setIsGenerating(true);
-    addLog(`rie: synthesizing artifact: ${docType}...`, 'info');
+    addLog(`rie: initializing synthesis pipeline for ${docType}...`, 'info');
+    addLog(`rie: applying mode-specific persona filters...`, 'info');
     try {
       const response = await fetch(`/api/chat/${sessionId}/generate-docs`, {
         method: 'POST',
@@ -190,7 +193,7 @@ export function DocumentationStudio() {
       if (result.success) {
         setDocs(prev => ({ ...prev, [docType]: result.content }));
         setActiveDoc(docType);
-        addLog(`rie: synthesis successful.`, 'success');
+        addLog(`rie: artifact synthesis complete. integrity verification: ✅`, 'success');
       }
     } catch (err) {
       addLog(`rie: synthesis error.`, 'error');

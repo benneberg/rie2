@@ -17,15 +17,6 @@ export class RIEValidator {
     const checks: ValidationCheck[] = [];
     const issues: ValidationIssue[] = [];
     const heatmap: HeatmapNode[] = [];
-    const recommendations: string[] = [];
-    const policy: PolicyConfig = metadata.config?.policy || {
-      minSecurityScore: 70,
-      minStructureScore: 60,
-      minCompletenessScore: 50,
-      minConsistencyScore: 60,
-      maxRiskIndex: 80,
-      failOnCritical: true
-    };
     let rawScores = {
       consistency: 100,
       completeness: 100,
@@ -68,8 +59,8 @@ export class RIEValidator {
         autoFixable: true
       });
     }
-    // 4. Security Audit (Secret Scanning Simulation)
-    const sensitiveFiles = metadata.structure.filter(f => 
+    // 4. Security Audit
+    const sensitiveFiles = metadata.structure.filter(f =>
       ['.env', '.pem', '.key', 'id_rsa'].some(pattern => f.name.toLowerCase().includes(pattern))
     );
     if (sensitiveFiles.length > 0) {
@@ -94,24 +85,22 @@ export class RIEValidator {
         suggestion: 'Define "workspaces" field in root package.json for better mapping.'
       });
     }
-    // 5.5 Summary Badge Logic
-    let summaryBadge = "NEUTRAL_SCAN";
-    if (finalScore >= 90) summaryBadge = "ELITE_ARCH";
-    else if (finalScore >= 80) summaryBadge = "HIGH_INTEGRITY";
-    else if (finalScore >= 70) summaryBadge = "STABLE_BUILD";
-    else if (finalScore >= 50) summaryBadge = "DEBT_WARNING";
-    else summaryBadge = "CRITICAL_FAILURE";
-
-    // 6. Weighted Scoring Calculation
-    // Security: 35%, Structure: 25%, Consistency: 20%, Completeness: 20%
+    // 6. Weighted Scoring Calculation (Moved up to fix hoisting)
     const finalScore = Math.round(
       (rawScores.security * 0.35) +
       (rawScores.structure * 0.25) +
       (rawScores.consistency * 0.20) +
       (rawScores.completeness * 0.20)
     );
-    const safeScore = Math.max(0, finalScoreValue);
-// 7. Heatmap Generation
+    const safeScore = Math.max(0, Math.min(100, finalScore));
+    // 7. Summary Badge Logic
+    let summaryBadge = "NEUTRAL_SCAN";
+    if (safeScore >= 90) summaryBadge = "ELITE_ARCH";
+    else if (safeScore >= 80) summaryBadge = "HIGH_INTEGRITY";
+    else if (safeScore >= 70) summaryBadge = "STABLE_BUILD";
+    else if (safeScore >= 50) summaryBadge = "DEBT_WARNING";
+    else summaryBadge = "CRITICAL_FAILURE";
+    // 8. Heatmap Generation
     const dirs = new Map<string, { count: number; nesting: number; coupling: number }>();
     metadata.structure.forEach(f => {
       const parts = f.path.split('/');
