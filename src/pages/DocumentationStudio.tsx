@@ -93,7 +93,7 @@ export function DocumentationStudio() {
         <!DOCTYPE html>
         <html>
         <head>
-          <title>ArchLens Analysis: ${meta.name}</title>
+          <title>ArchLens Analysis: ${meta.name || 'Unknown'}</title>
           <style>
             body { font-family: sans-serif; background: #070911; color: #dde4f4; padding: 40px; }
             .card { background: #0b0e18; border: 1px solid #181e30; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
@@ -102,7 +102,7 @@ export function DocumentationStudio() {
           </style>
         </head>
         <body>
-          <h1>${meta.name.toUpperCase()} ARCHITECTURAL REPORT</h1>
+          <h1>${(meta.name || 'UNKNOWN').toUpperCase()} ARCHITECTURAL REPORT</h1>
           <div class="card">
             <div class="score">${meta.validation?.score || 0}%</div>
             <p>HEALTH SCORE</p>
@@ -113,8 +113,8 @@ export function DocumentationStudio() {
           </div>
           <div class="card">
             <h2>FILES ANALYZED</h2>
-            <p>TOTAL: ${meta.totalFiles}</p>
-            <p>STACK: ${meta.primaryLanguage}</p>
+            <p>TOTAL: ${meta.totalFiles || 0}</p>
+            <p>STACK: ${meta.primaryLanguage || 'Unknown'}</p>
           </div>
           <footer>GENERATE BY ARCHLENS_PRO_ENGINEER_V4.2</footer>
         </body>
@@ -126,7 +126,7 @@ export function DocumentationStudio() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `rie-report-${meta.name}.html`;
+        a.download = `rie-report-${meta.name || 'unknown'}.html`;
         a.click();
         addLog('rie: report-export.html generated successfully.', 'success');
         setIsExporting(false);
@@ -142,7 +142,7 @@ export function DocumentationStudio() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `archlens-context-${response.data.metadata.name}.json`;
+      a.download = `archlens-context-${response.data.metadata.name || 'unknown'}.json`;
       a.click();
       addLog('rie: full llm context exported for rag usage.', 'success');
     }
@@ -167,6 +167,27 @@ export function DocumentationStudio() {
     } finally {
       setIsGenerating(false);
     }
+  };
+  const exportGitHubAction = () => {
+    const workflow = `name: ArchLens Architectural Guardrail
+on: [push, pull_request]
+jobs:
+  archlens_scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ArchLens Core Scan
+        uses: archlens/action-rie-core@v1
+        with:
+          session_id: ${{ inputs.session_id || '${sessionId || 'default-session'}' }}
+          threshold: 80
+          fail_on_drift: true
+        env:
+          ARCHLENS_TOKEN: ${{ secrets.ARCHLENS_TOKEN }}
+`.trim();
+    setDocs(prev => ({ ...prev, 'archlens.yml': workflow }));
+    setActiveDoc('archlens.yml');
+    addLog('rie: github action workflow generated for ci/cd pipelines.', 'success');
   };
   if (isLoading) return <AppLayout container><Skeleton className="h-[600px] glass" /></AppLayout>;
   return (
@@ -197,7 +218,7 @@ export function DocumentationStudio() {
               <CardContent className="p-4 space-y-4">
                 <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-white/5 pb-2">Technical Artifacts</h3>
                 <div className="space-y-2">
-                  {['README.md', 'ARCHITECTURE.md', 'SECURITY.md', 'TESTING.md'].map(doc => (
+                  {['README.md', 'ARCHITECTURE.md', 'SECURITY.md', 'archlens.yml'].map(doc => (
                     <button
                       key={doc}
                       onClick={() => setActiveDoc(doc)}
@@ -207,12 +228,15 @@ export function DocumentationStudio() {
                       )}
                     >
                       <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4" /> {doc}
+                        {doc.endsWith('.yml') ? <Code className="w-4 h-4" /> : <FileText className="w-4 h-4" />} {doc}
                       </div>
                       {docs[doc] && <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />}
                     </button>
                   ))}
                 </div>
+                <Button variant="outline" className="w-full text-[9px] font-bold uppercase border-dashed border-white/20" onClick={exportGitHubAction}>
+                   + CI/CD Integration
+                </Button>
               </CardContent>
             </Card>
           </div>

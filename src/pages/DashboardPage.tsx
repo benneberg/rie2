@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion } from 'framer-motion';
-import { Files, Code2, Database, AlertTriangle, Github, HardDrive, Box, ChevronRight, LayoutGrid, Zap, Info } from 'lucide-react';
+import { Files, Code2, Database, AlertTriangle, Github, HardDrive, Box, ChevronRight, LayoutGrid, Zap, Info, TrendingUp, TrendingDown, Anchor, Activity } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { cn } from '@/lib/utils';
 export function DashboardPage() {
@@ -21,6 +21,17 @@ export function DashboardPage() {
   const sessionId = searchParams.get('session');
   const [metadata, setMetadata] = useState<RepositoryMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isComparing, setIsComparing] = useState(false);
+
+  const establishBaseline = async () => {
+    const toastId = toast.loading('FREEZING_BASELINE...');
+    try {
+      await fetch(`/api/chat/${sessionId}/create-baseline`, { method: 'POST' });
+      fetchMetadata();
+      toast.success('BASELINE_ESTABLISHED', { id: toastId });
+    } catch (e) { toast.error('BASELINE_FAILED'); }
+  };
+
   const fetchMetadata = useCallback(async () => {
     try {
       const response = await chatService.getMessages();
@@ -71,17 +82,58 @@ export function DashboardPage() {
             <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-none">{metadata.name}</h1>
           </div>
           <div className="flex gap-4">
+            <Button variant="outline" onClick={() => setIsComparing(!isComparing)} className={cn("btn-brutal-dark", isComparing && "bg-primary/20")}>
+              {isComparing ? 'Exit_Drift' : 'Drift_Analysis'}
+            </Button>
+            {!metadata.baseline && <Button onClick={establishBaseline} className="btn-brutal-dark">Establish_Baseline</Button>}
             <Button variant="outline" onClick={() => navigate(`/studio?session=${sessionId}`)} className="btn-brutal-dark">Artifact Studio</Button>
             <Button onClick={() => navigate(`/settings?session=${sessionId}`)} className="btn-brutal-amber">Configure_Engine</Button>
           </div>
         </header>
+
+        {isComparing && metadata.drift && (
+          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="p-6 glass border-l-4 border-l-primary shadow-brutal-dark flex flex-wrap gap-8 items-center justify-between">
+             <div className="space-y-1">
+               <div className="text-[10px] font-black uppercase tracking-widest text-primary">Baseline_Drift_Report</div>
+               <div className="flex items-center gap-3">
+                  <div className={cn("text-3xl font-stats", metadata.drift.delta >= 0 ? "text-emerald-500" : "text-red-500")}>
+                    {metadata.drift.delta > 0 ? '+' : ''}{metadata.drift.delta}%
+                  </div>
+                  {metadata.drift.delta < 0 ? <TrendingDown className="text-red-500 w-6 h-6" /> : <TrendingUp className="text-emerald-500 w-6 h-6" />}
+               </div>
+             </div>
+             <div className="flex gap-8">
+                <div className="text-center">
+                  <div className="text-xl font-stats">{metadata.drift.addedFiles}</div>
+                  <div className="text-[8px] font-mono uppercase opacity-50">Files_Added</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xl font-stats">{metadata.drift.newDependencies}</div>
+                  <div className="text-[8px] font-mono uppercase opacity-50">New_Edges</div>
+                </div>
+             </div>
+             <div className="max-w-md text-[10px] font-mono uppercase opacity-70 leading-relaxed">
+               {metadata.drift.regressions.length > 0 ? `WARNING: ${metadata.drift.regressions[0]}` : "No critical architectural regressions detected since baseline."}
+             </div>
+          </motion.div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {report?.categories && Object.entries(report.categories).map(([cat, score]) => (
+          {report?.categories && Object.entries(report.categories).map(([cat, score]) => {
+            const prevScore = isComparing && metadata.baseline?.validation?.categories ? (metadata.baseline.validation.categories as any)[cat] : null;
+            return (
             <Card key={cat} className="glass overflow-hidden border-b-2 border-b-primary/20">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">{cat}</span>
-                  <div className={cn("text-2xl font-stats", scoreColor(score))}>{score}%</div>
+                  <div className="flex items-center gap-2">
+                    {prevScore !== null && (
+                      <span className={cn("text-[10px] font-stats", score >= prevScore ? "text-emerald-500" : "text-red-500")}>
+                        {score >= prevScore ? '+' : ''}{(score - prevScore).toFixed(0)}%
+                      </span>
+                    )}
+                    <div className={cn("text-2xl font-stats", scoreColor(score))}>{score}%</div>
+                  </div>
                 </div>
                 <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
                   <motion.div
@@ -96,7 +148,7 @@ export function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+          )})}
         </div>
         {report?.recommendations?.length > 0 && (
           <div className="p-6 bg-primary/5 border border-primary/20 rounded-xl space-y-4">
@@ -115,6 +167,23 @@ export function DashboardPage() {
         )}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="glass border-l-4 border-l-emerald-500">
+                <CardContent className="p-6">
+                   <div className="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-2 flex items-center gap-2"><Anchor className="w-3 h-3" /> Isolation_Score</div>
+                   <div className="text-4xl font-stats">{metadata.validation?.riskMetrics?.isolationScore || 0}%</div>
+                   <div className="text-[9px] font-mono uppercase opacity-40 mt-1">Resistance to system-wide regression</div>
+                </CardContent>
+              </Card>
+              <Card className="glass border-l-4 border-l-amber-500">
+                <CardContent className="p-6">
+                   <div className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2 flex items-center gap-2"><Activity className="w-3 h-3" /> Coupling_Index</div>
+                   <div className="text-4xl font-stats">{(metadata.validation?.riskMetrics?.couplingIndex || 0).toFixed(1)}</div>
+                   <div className="text-[9px] font-mono uppercase opacity-40 mt-1">Avg nodes per architectural cluster</div>
+                </CardContent>
+              </Card>
+            </div>
+
             <Card className="glass border-border shadow-brutal-dark">
               <CardContent className="p-6">
                 <div className="flex justify-between items-center mb-8">

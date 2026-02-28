@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, Save, Download, Cpu, Shield } from 'lucide-react';
+import { Trash2, Save, Download, Cpu, Shield, Gavel, History } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { toast, Toaster } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
@@ -27,7 +27,15 @@ export function SettingsPage() {
     maxDepth: 10,
     temperature: 0.7,
     outputDir: '.rie',
-    strictValidation: false
+    strictValidation: false,
+    policy: {
+      minSecurityScore: 70,
+      minStructureScore: 60,
+      minCompletenessScore: 50,
+      minConsistencyScore: 60,
+      maxRiskIndex: 80,
+      failOnCritical: true
+    }
   });
   const [rawConfig, setRawConfig] = useState('');
   const loadConfig = useCallback(async () => {
@@ -77,6 +85,14 @@ export function SettingsPage() {
     setConfig(next);
     setRawConfig(JSON.stringify(next, null, 2));
   };
+
+  const updatePolicy = (policyUpdates: any) => {
+    const nextPolicy = { ...(config.policy || {}), ...policyUpdates };
+    const next = { ...config, policy: nextPolicy };
+    setConfig(next as RIEConfig);
+    setRawConfig(JSON.stringify(next, null, 2));
+  };
+
   const handleExport = () => {
     const blob = new Blob([rawConfig], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -100,8 +116,9 @@ export function SettingsPage() {
           </div>
         </header>
         <Tabs defaultValue="visual" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/5 h-14 mb-8">
+          <TabsList className="grid w-full grid-cols-3 bg-white/5 border border-white/5 h-14 mb-8">
             <TabsTrigger value="visual" className="text-[10px] font-black uppercase tracking-widest">Visual Editor</TabsTrigger>
+            <TabsTrigger value="policy" className="text-[10px] font-black uppercase tracking-widest">Governance & Policy</TabsTrigger>
             <TabsTrigger value="raw" className="text-[10px] font-black uppercase tracking-widest">Raw Config (.json)</TabsTrigger>
           </TabsList>
           <TabsContent value="visual">
@@ -152,6 +169,47 @@ export function SettingsPage() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+          <TabsContent value="policy">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+               <Card className="glass md:col-span-2 shadow-brutal-dark">
+                 <CardHeader>
+                   <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><Gavel className="w-4 h-4" /> Threshold_Management</CardTitle>
+                 </CardHeader>
+                 <CardContent className="space-y-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                       {[
+                         { label: 'Security_Threshold', field: 'minSecurityScore' },
+                         { label: 'Structure_Threshold', field: 'minStructureScore' },
+                         { label: 'Completeness_Threshold', field: 'minCompletenessScore' },
+                         { label: 'Max_Risk_Index', field: 'maxRiskIndex' }
+                       ].map(item => (
+                         <div key={item.field} className="space-y-4">
+                            <div className="flex justify-between text-[10px] font-mono font-bold uppercase tracking-widest">
+                              <span>{item.label}</span>
+                              <span className="text-primary">{(config.policy as any)?.[item.field] || 0}%</span>
+                            </div>
+                            <Input 
+                              type="range" min="0" max="100" 
+                              value={(config.policy as any)?.[item.field] || 0}
+                              onChange={(e) => updatePolicy({ [item.field]: parseInt(e.target.value) })}
+                              className="h-1 bg-white/10"
+                            />
+                         </div>
+                       ))}
+                    </div>
+                 </CardContent>
+               </Card>
+               <Card className="glass shadow-brutal-dark">
+                  <CardHeader>
+                    <CardTitle className="text-[10px] font-black uppercase tracking-widest flex items-center gap-2"><History className="w-4 h-4" /> Baseline_History</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-8 flex flex-col items-center justify-center text-center space-y-4 opacity-40">
+                     <History className="w-12 h-12" />
+                     <span className="text-[10px] font-mono uppercase">V1_MASTER_SNAPSHOT<br/>2024-05-12 14:02</span>
+                  </CardContent>
+               </Card>
+             </div>
           </TabsContent>
           <TabsContent value="raw">
             <Card className="glass shadow-brutal-dark overflow-hidden">

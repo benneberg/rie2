@@ -37,6 +37,14 @@ export interface HeatmapNode {
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
   fileCount: number;
 }
+export interface RiskMetrics {
+  fanInMax: number;
+  fanOutMax: number;
+  couplingIndex: number;
+  isolationScore: number;
+  hasCircularDeps: boolean;
+  hotspotPaths: string[];
+}
 export interface ValidationReport {
   score: number;
   categories: {
@@ -49,7 +57,27 @@ export interface ValidationReport {
   issues: ValidationIssue[];
   heatmap: HeatmapNode[];
   recommendations: string[];
+  riskMetrics?: RiskMetrics;
   updatedAt: number;
+}
+export interface DriftReport {
+  previousScore: number;
+  currentScore: number;
+  delta: number;
+  addedFiles: number;
+  removedFiles: number;
+  newDependencies: number;
+  regressions: string[];
+  improvements: string[];
+  timestamp: number;
+}
+export interface PolicyConfig {
+  minSecurityScore: number;
+  minStructureScore: number;
+  minCompletenessScore: number;
+  minConsistencyScore: number;
+  maxRiskIndex: number;
+  failOnCritical: boolean;
 }
 export interface RIEConfig {
   excludePatterns: string[];
@@ -62,6 +90,7 @@ export interface RIEConfig {
   temperature: number;
   outputDir: string;
   strictValidation: boolean;
+  policy?: PolicyConfig;
 }
 export interface RepositorySource {
   type: 'upload' | 'github';
@@ -77,6 +106,7 @@ export interface LLMContext {
   structure: string[];
   dependencies: DependencyEdge[];
   excerpts: Record<string, string>;
+  driftSummary?: string;
 }
 export interface RepositoryMetadata {
   name: string;
@@ -94,6 +124,8 @@ export interface RepositoryMetadata {
   workspaces?: string[];
   analyzedAt: number;
   status?: 'analyzing' | 'completed' | 'failed';
+  baseline?: RepositoryMetadata;
+  drift?: DriftReport;
 }
 export interface ScanResult {
   success: boolean;

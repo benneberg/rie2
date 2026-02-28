@@ -26,7 +26,15 @@ export class ChatAgent extends Agent<Env, ChatState> {
       maxDepth: 10,
       temperature: 0.7,
       outputDir: '.rie',
-      strictValidation: false
+      strictValidation: false,
+      policy: {
+        minSecurityScore: 70,
+        minStructureScore: 60,
+        minCompletenessScore: 50,
+        minConsistencyScore: 60,
+        maxRiskIndex: 80,
+        failOnCritical: true
+      }
     }
   };
   async onStart(): Promise<void> {
@@ -49,6 +57,9 @@ export class ChatAgent extends Agent<Env, ChatState> {
       if (method === 'POST' && path === '/generate-docs') return this.handleGenerateDocs(await request.json());
       if (method === 'POST' && path === '/save-docs') return this.handleSaveDocs(await request.json());
       if (method === 'POST' && path === '/update-config') return this.handleUpdateConfig(await request.json());
+      if (method === 'POST' && path === '/create-baseline') return this.handleCreateBaseline();
+      if (method === 'POST' && path === '/compare-baseline') return this.handleCompareBaseline();
+      if (method === 'POST' && path === '/update-policy') return this.handleUpdatePolicy(await request.json());
       if (method === 'GET' && path === '/llm-context') return this.handleGetLLMContext();
       if (method === 'POST' && path === '/export-report') return this.handleExportReport();
       return Response.json({ success: false, error: API_RESPONSES.NOT_FOUND }, { status: 404 });
@@ -67,6 +78,32 @@ export class ChatAgent extends Agent<Env, ChatState> {
     this.setState({ ...this.state, config: { ...this.state.config, ...body.config } });
     return Response.json({ success: true, config: this.state.config });
   }
+  private async handleUpdatePolicy(body: { policy: any }): Promise<Response> {
+    const config = { ...this.state.config, policy: body.policy };
+    this.setState({ ...this.state, config });
+    if (this.state.metadata) {
+      const metadata = { ...this.state.metadata, config };
+      const validation = await RIEValidator.validate(metadata);
+      this.setState({ ...this.state, metadata: { ...metadata, validation } });
+    }
+    return Response.json({ success: true, policy: config.policy });
+  }
+  private async handleCreateBaseline(): Promise<Response> {
+    if (!this.state.metadata) return Response.json({ success: false, error: 'Analyze first' }, { status: 400 });
+    const metadata = { ...this.state.metadata, baseline: JSON.parse(JSON.stringify(this.state.metadata)) };
+    this.setState({ ...this.state, metadata });
+    return Response.json({ success: true });
+  }
+  private async handleCompareBaseline(): Promise<Response> {
+    if (!this.state.metadata || !this.state.metadata.baseline) {
+      return Response.json({ success: false, error: 'No baseline found' }, { status: 400 });
+    }
+    const { RIEDriftEngine } = await import('./rie-drift');
+    const drift = RIEDriftEngine.compare(this.state.metadata, this.state.metadata.baseline);
+    const metadata = { ...this.state.metadata, drift };
+    this.setState({ ...this.state, metadata });
+    return Response.json({ success: true, drift });
+  }
   private async handleExportReport(): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false, error: 'No data to export' }, { status: 400 });
     return Response.json({ success: true, metadata: this.state.metadata });
@@ -75,12 +112,12 @@ export class ChatAgent extends Agent<Env, ChatState> {
     if (!this.state.metadata) return Response.json({ success: false, error: 'Metadata empty' }, { status: 400 });
     const meta = this.state.metadata;
     const context: LLMContext = {
-      projectName: meta.name,
+      projectName: meta.name || 'Unknown',
       summary: meta.documentation?.['summary'] || '',
       healthScore: meta.validation?.score || 0,
-      primaryLanguage: meta.primaryLanguage,
-      structure: meta.structure.slice(0, 100).map(f => f.path),
-      dependencies: meta.dependencies,
+      primaryLanguage: meta.primaryLanguage || 'Unknown',
+      structure: (meta.structure || []).slice(0, 100).map(f => f.path || ''),
+      dependencies: meta.dependencies || [],
       excerpts: {}
     };
     return Response.json({ success: true, context });
@@ -126,8 +163,14 @@ export class ChatAgent extends Agent<Env, ChatState> {
     metadata.validation = await RIEValidator.validate(metadata);
     metadata.source = source;
     metadata.status = 'completed';
+    if (this.state.metadata?.baseline) {
+      metadata.baseline = this.state.metadata.baseline;
+      const { RIEDriftEngine } = await import('./rie-drift');
+      metadata.drift = RIEDriftEngine.compare(metadata, metadata.baseline);
+    }
     if (this.chatHandler) {
-      const summaryPrompt = `Perform an architectural summary for project "${repoName}". Health: ${metadata.validation.score}%. Files: ${metadata.totalFiles}. Strategy: ${metadata.isMonorepo ? 'Monorepo' : 'Monolith'}. Highlight core tech debt based on risk heatmap.`;
+      const driftText = metadata.drift ? ` ARCH DRIFT: ${metadata.drift.delta > 0 ? '+' : ''}${metadata.drift.delta}%. Regressions: ${metadata.drift.regressions.join(', ')}.` : '';
+      const summaryPrompt = `Perform an architectural summary for project "${repoName}". Health: ${metadata.validation?.score || 0}%. Files: ${metadata.totalFiles || 0}.${driftText} Highlight core tech debt based on risk metrics (coupling: ${metadata.validation?.riskMetrics?.couplingIndex || 'N/A'}).`;
       try {
         const summary = await this.chatHandler.processMessage(summaryPrompt, []);
         if (!metadata.documentation) metadata.documentation = {};
@@ -147,8 +190,8 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
     const userMessage = createMessage('user', message.trim());
     this.setState({ ...this.state, messages: [...this.state.messages, userMessage], isProcessing: true });
-    const metaContext = this.state.metadata ? 
-      `CONTEXT: ArchLens Scan for "${this.state.metadata.name}". Health Score: ${this.state.metadata.validation?.score}/100. Structure: ${this.state.metadata.isMonorepo ? 'Monorepo' : 'Monolith'}.` 
+    const metaContext = this.state.metadata ?
+      `CONTEXT: ArchLens Scan for "${this.state.metadata.name || 'Unknown'}". Health Score: ${this.state.metadata.validation?.score || 0}/100. Structure: ${this.state.metadata.isMonorepo ? 'Monorepo' : 'Monolith'}.`
       : `CONTEXT: General ArchLens Assistant.`;
     try {
       if (!this.chatHandler) throw new Error('Chat handler not initialized');
@@ -189,7 +232,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
   }
   private async handleGenerateDocs(body: { type: string }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false, error: 'No metadata' }, { status: 400 });
-    const prompt = `Synthesize technical ${body.type} for project "${this.state.metadata.name}". Base it on architectural metadata. Use clean, brutalist Markdown. Focus on structural integrity and modularity.`;
+    const prompt = `Synthesize technical ${body.type} for project "${this.state.metadata.name || 'Unknown'}". Base it on architectural metadata. Use clean, brutalist Markdown. Focus on structural integrity and modularity.`;
     try {
       const response = await this.chatHandler!.processMessage(prompt, []);
       const documentation = { ...(this.state.metadata.documentation || {}), [body.type]: response.content };

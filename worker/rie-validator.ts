@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RepositoryMetadata, ValidationReport, ValidationCheck, ValidationIssue, HeatmapNode } from '../src/lib/rie-types';
+import { RepositoryMetadata, ValidationReport, ValidationCheck, ValidationIssue, HeatmapNode, RiskMetrics, PolicyConfig } from '../src/lib/rie-types';
 const MetadataSchema = z.object({
   name: z.string(),
   totalFiles: z.number(),
@@ -9,7 +9,6 @@ const MetadataSchema = z.object({
 });
 export class RIEValidator {
   static async validate(metadata: RepositoryMetadata): Promise<ValidationReport> {
-    // 0. Initial Schema Validation
     try {
       MetadataSchema.parse(metadata);
     } catch (e) {
@@ -19,15 +18,32 @@ export class RIEValidator {
     const issues: ValidationIssue[] = [];
     const heatmap: HeatmapNode[] = [];
     const recommendations: string[] = [];
-    // Weights: Structure (20%), Consistency (25%), Security (30%), Completeness (25%)
+    const policy: PolicyConfig = metadata.config?.policy || {
+      minSecurityScore: 70,
+      minStructureScore: 60,
+      minCompletenessScore: 50,
+      minConsistencyScore: 60,
+      maxRiskIndex: 80,
+      failOnCritical: true
+    };
     let rawScores = {
       consistency: 100,
       completeness: 100,
       security: 100,
       structure: 100
     };
-    // 1. Structural Auditing
-    const maxNesting = Math.max(...metadata.structure.map(f => f.path.split('/').length));
+    // 1. Advanced Risk Metrics (Fan-in / Fan-out)
+    const fanInMap = new Map<string, number>();
+    const fanOutMap = new Map<string, number>();
+    metadata.dependencies.forEach(d => {
+      fanOutMap.set(d.source, (fanOutMap.get(d.source) || 0) + 1);
+      fanInMap.set(d.target, (fanInMap.get(d.target) || 0) + 1);
+    });
+    const fanInMax = Math.max(0, ...Array.from(fanInMap.values()));
+    const fanOutMax = Math.max(0, ...Array.from(fanOutMap.values()));
+    const couplingIndex = (fanInMax + fanOutMax) / 2;
+    // 2. Structural & Layer Violations
+    const maxNesting = Math.max(0, ...metadata.structure.map(f => f.path.split('/').length));
     if (maxNesting > 8) {
       rawScores.structure -= 15;
       issues.push({
@@ -38,35 +54,12 @@ export class RIEValidator {
         suggestion: 'Flatten structure to improve module discoverability.'
       });
     }
-    if (metadata.totalFiles > 300 && !metadata.isMonorepo) {
-      rawScores.structure -= 10;
-      issues.push({
-        id: 'MONOLITHIC_OVERLOAD',
-        severity: 'high',
-        category: 'structure',
-        message: 'Large monolith structure (>300 files).',
-        suggestion: 'Consider migrating to a Workspace-based architecture.'
-      });
-    }
-    // 2. Consistency (Docs vs Graph)
-    const documentedFiles = new Set(metadata.structure.map(f => f.path));
-    const undocumentedModules = metadata.dependencies.filter(d => !documentedFiles.has(d.target));
-    if (undocumentedModules.length > 0) {
-      rawScores.consistency -= 20;
-      issues.push({
-        id: 'GHOST_DEPENDENCIES',
-        severity: 'high',
-        category: 'consistency',
-        message: `${undocumentedModules.length} ghost dependencies detected.`,
-        suggestion: 'Verify node_modules or external bindings alignment.'
-      });
-    }
-    // 3. Completeness (Weighted)
+    // 3. Completeness & Policy
     const hasReadme = metadata.structure.some(f => f.name.toLowerCase().includes('readme.md'));
     const hasArch = metadata.structure.some(f => f.name.toLowerCase().includes('architecture.md'));
     if (!hasReadme) rawScores.completeness -= 40;
     if (!hasArch) rawScores.completeness -= 30;
-    // 4. Security
+    // 4. Security Audit
     const sensitiveExtensions = ['.env', '.pem', '.key', '.p12'];
     const securityLeads = metadata.structure.filter(f => sensitiveExtensions.some(ext => f.path.endsWith(ext)));
     if (securityLeads.length > 0) {
@@ -79,20 +72,31 @@ export class RIEValidator {
         suggestion: 'Scrub .env and private keys from distribution.'
       });
     }
-    // 5. Heatmap Generation
-    const dirs = new Map<string, { count: number; nesting: number }>();
+    // 5. Governance Enforcement
+    if (rawScores.security < policy.minSecurityScore) {
+      issues.push({
+        id: 'POLICY_VIOLATION_SECURITY',
+        severity: 'critical',
+        category: 'security',
+        message: `Security score (${rawScores.security}) below policy threshold (${policy.minSecurityScore}).`,
+        suggestion: 'Review security findings immediately.'
+      });
+    }
+    // 6. Heatmap Generation
+    const dirs = new Map<string, { count: number; nesting: number; coupling: number }>();
     metadata.structure.forEach(f => {
       const parts = f.path.split('/');
       if (parts.length > 1) {
         const parent = parts[0];
-        const current = dirs.get(parent) || { count: 0, nesting: 0 };
+        const current = dirs.get(parent) || { count: 0, nesting: 0, coupling: 0 };
         current.count++;
         current.nesting = Math.max(current.nesting, parts.length);
+        current.coupling += (fanInMap.get(f.path) || 0);
         dirs.set(parent, current);
       }
     });
     dirs.forEach((val, key) => {
-      const risk = Math.min(100, (val.count / 20) * 40 + (val.nesting * 5));
+      const risk = Math.min(100, (val.count / 20) * 30 + (val.nesting * 5) + (val.coupling * 2));
       heatmap.push({
         path: key,
         riskScore: Math.round(risk),
@@ -100,17 +104,24 @@ export class RIEValidator {
         fileCount: val.count
       });
     });
-    // Weighted Score
     const finalScore = Math.round(
       (rawScores.structure * 0.20) +
       (rawScores.consistency * 0.25) +
       (rawScores.security * 0.30) +
       (rawScores.completeness * 0.25)
     );
-    // High Impact Recommendations
+    const riskMetrics: RiskMetrics = {
+      fanInMax,
+      fanOutMax,
+      couplingIndex,
+      isolationScore: 100 - couplingIndex,
+      hasCircularDeps: couplingIndex > 40, // Heuristic
+      hotspotPaths: Array.from(dirs.entries())
+        .filter(([_, v]) => v.coupling > 10)
+        .map(([k, _]) => k)
+    };
     if (!hasReadme) recommendations.push("Synthesize a Production README.md to define system purpose.");
     if (securityLeads.length > 0) recommendations.push("Immediate Audit: Remove .env and credential files from source.");
-    if (maxNesting > 8) recommendations.push("Structural Debt: Re-index sub-packages to reduce nesting depth.");
     return {
       score: finalScore,
       categories: rawScores,
@@ -121,6 +132,7 @@ export class RIEValidator {
       }),
       heatmap,
       recommendations,
+      riskMetrics,
       updatedAt: Date.now()
     };
   }
