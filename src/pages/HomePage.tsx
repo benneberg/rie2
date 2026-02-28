@@ -19,7 +19,6 @@ export function HomePage() {
   useEffect(() => {
     uploadingRef.current = isUploading;
   }, [isUploading]);
-
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0 || uploadingRef.current) return;
     setIsUploading(true);
@@ -28,13 +27,22 @@ export function HomePage() {
       const zipFile = acceptedFiles[0];
       const jszip = new JSZip();
       const zipContent = await jszip.loadAsync(zipFile);
-      const fileManifest = Object.entries(zipContent.files)
-        .filter(([path, file]) => !file.dir && !path.includes('__MACOSX') && !path.split('/').some(p => p.startsWith('.')))
-        .map(([path, file]) => ({
-          name: path,
-          size: (file as any)._data?.uncompressedSize || 0,
-          type: 'file' as const
-        }));
+      const fileManifest = await Promise.all(
+        Object.entries(zipContent.files)
+          .filter(([path, file]) => !file.dir && !path.includes('__MACOSX') && !path.split('/').some(p => p.startsWith('.')))
+          .map(async ([path, file]) => {
+            let content = undefined;
+            if (path === 'package.json' || path.endsWith('/package.json')) {
+              content = await file.async("string");
+            }
+            return {
+              name: path,
+              size: (file as any)._data?.uncompressedSize || 0,
+              type: 'file' as const,
+              content
+            };
+          })
+      );
       if (fileManifest.length === 0) throw new Error('EMPTY_OR_INVALID_ZIP');
       const sessionId = crypto.randomUUID();
       const name = zipFile.name.replace(/\.[^/.]+$/, "");
@@ -51,9 +59,9 @@ export function HomePage() {
         throw new Error('SERVER_ANALYSIS_FAILED');
       }
     } catch (error) {
-      toast.error('INGEST_FAILURE', { 
-        id: toastId, 
-        description: error instanceof Error ? error.message : 'Ensure the ZIP file is valid and readable.' 
+      toast.error('INGEST_FAILURE', {
+        id: toastId,
+        description: error instanceof Error ? error.message : 'Ensure the ZIP file is valid and readable.'
       });
     } finally {
       setIsUploading(false);
@@ -64,19 +72,16 @@ export function HomePage() {
     e.stopPropagation();
     setIsDragActive(true);
   };
-
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragActive(true);
   };
-
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     if (!dropRef.current?.contains(e.relatedTarget as Node)) {
       setIsDragActive(false);
     }
   };
-
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -127,9 +132,7 @@ export function HomePage() {
       <OrbitalBackground />
       <Toaster richColors position="top-center" theme="dark" />
       <div className="max-w-7xl mx-auto px-6 py-20 lg:py-32 flex flex-col items-center text-center">
-        <div
-          className="mb-12 relative group opacity-0 animate-reveal"
-        >
+        <div className="mb-12 relative group opacity-0 animate-reveal">
           <div className="bg-primary text-primary-foreground px-6 py-2 font-display font-black text-4xl uppercase tracking-tighter shadow-brutal-dark group-hover:translate-x-1 group-hover:translate-y-1 group-hover:shadow-none transition-all">
             ArchLens
           </div>
@@ -137,14 +140,10 @@ export function HomePage() {
             PRO_4.2.1
           </div>
         </div>
-        <h1
-          className="text-5xl md:text-8xl font-display font-extrabold tracking-tighter mb-8 leading-[0.9] uppercase max-w-5xl opacity-0 animate-reveal [animation-delay:0.1s]"
-        >
+        <h1 className="text-5xl md:text-8xl font-display font-extrabold tracking-tighter mb-8 leading-[0.9] uppercase max-w-5xl opacity-0 animate-reveal [animation-delay:0.1s]">
           Visual <span className="text-primary">Intelligence</span> for Dirty Code.
         </h1>
-        <p
-          className="text-lg md:text-xl text-[#dde4f4]/60 max-w-2xl font-medium tracking-tight mb-16 opacity-0 animate-reveal [animation-delay:0.2s]"
-        >
+        <p className="text-lg md:text-xl text-[#dde4f4]/60 max-w-2xl font-medium tracking-tight mb-16 opacity-0 animate-reveal [animation-delay:0.2s]">
           X-ray your repository. Map dependencies in high-definition. Generate documentation that doesn't suck. All in seconds.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl mb-24">

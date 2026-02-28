@@ -45,7 +45,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
       this.env.CF_AI_API_KEY,
       model
     );
-    console.log(`ChatHandler initialized: model='${model}', CF_AI_BASE_URL='${this.env.CF_AI_BASE_URL || 'MISSING'}', API_KEY present: ${!!this.env.CF_AI_API_KEY}`);
   }
   async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -72,11 +71,26 @@ export class ChatAgent extends Agent<Env, ChatState> {
           const zipUrl = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/zipball/${source.ref}`;
           const res = await fetch(zipUrl, { headers: { 'User-Agent': 'ArchLens' } });
           const zip = await JSZip.loadAsync(await res.arrayBuffer());
-          analysisFiles = Object.entries(zip.files).filter(([_, f]) => !f.dir).map(([path, f]) => ({
-            name: path.split('/').slice(1).join('/'),
-            size: (f as any)._data?.uncompressedSize || 0,
-            type: 'file'
-          })).filter(f => f.name);
+          const zipFiles = await Promise.all(
+            Object.entries(zip.files)
+              .filter(([_, f]) => !f.dir)
+              .map(async ([path, f]) => {
+                const name = path.split('/').slice(1).join('/');
+                if (!name) return null;
+                let content = undefined;
+                // Extract content for critical manifest files
+                if (name === 'package.json' || name.endsWith('/package.json')) {
+                  content = await f.async("string");
+                }
+                return {
+                  name,
+                  size: (f as any)._data?.uncompressedSize || 0,
+                  type: 'file',
+                  content
+                };
+              })
+          );
+          analysisFiles = zipFiles.filter(Boolean);
         } catch (e) {
           return Response.json({ success: false, error: 'Git Clone Failed' }, { status: 500 });
         }
@@ -92,14 +106,13 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
     if (this.chatHandler) {
       try {
-        const prompt = `Architectural summary for ${repoName}. Health Score: ${metadata.validation?.score}%. ${metadata.drift ? `Drift detected: ${metadata.drift.delta}% change.` : ''} Be technical and focus on bottlenecks.`;
+        const prompt = `Architectural summary for ${repoName}. Health Score: ${metadata.validation?.score}%. Focus on bottlenecks.`;
         const summaryRes = await this.chatHandler.processMessage(prompt, []);
         if (!metadata.documentation) metadata.documentation = {};
         metadata.documentation['summary'] = summaryRes.content;
       } catch (error: any) {
-        console.error('handleAnalyze AI summary failed:', error.message || error);
         if (!metadata.documentation) metadata.documentation = {};
-        metadata.documentation['summary'] = `Fallback deterministic summary for ${repoName}: Health Score: ${metadata.validation?.score ?? 'N/A'}%${metadata.drift ? `, Drift from baseline: ${metadata.drift.delta}%` : ''}, Files: ${analysisFiles.length}. Critical issues: ${metadata.validation?.issues?.length ?? 0}.\n\nAI summary disabled: Invalid model or vars (expected 'gpt-4o-mini' with Cloudflare AI Gateway).`;
+        metadata.documentation['summary'] = `Deterministic summary for ${repoName}: Health Score: ${metadata.validation?.score ?? 'N/A'}%`;
       }
     }
     this.setState({ ...this.state, metadata });
@@ -113,7 +126,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
     } else {
       updatedMetadata.validation.issues = updatedMetadata.validation.issues.filter((i: any) => i.id !== body.issueId);
     }
-    // Recalculate validation after simulation
     updatedMetadata.validation = await RIEValidator.validate(updatedMetadata);
     this.setState({ ...this.state, metadata: updatedMetadata });
     return Response.json({ success: true });
@@ -125,7 +137,6 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private async handleCreateBaseline(): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false }, { status: 400 });
     const baseline = JSON.parse(JSON.stringify(this.state.metadata));
-    // Remove self-referencing drift or baseline fields from the snapshot
     delete baseline.baseline;
     delete baseline.drift;
     const metadata = { ...this.state.metadata, baseline };

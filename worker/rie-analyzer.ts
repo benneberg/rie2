@@ -5,18 +5,25 @@ export class RIEAnalyzer {
     const filteredFiles = files.filter(f => !excludeList.some(pattern => f.name.toLowerCase().includes(pattern)));
     const totalFiles = filteredFiles.length;
     const totalSize = filteredFiles.reduce((acc, f) => acc + (f.size || 0), 0);
-    // Monorepo & Workspace mapping
+    // Monorepo & Workspace mapping with robust manifest detection
     const workspaces: string[] = [];
     let isMonorepo = false;
-    const rootPackage = files.find(f => f.name === 'package.json');
+    // Find the root-most package.json
+    const manifestFiles = files
+      .filter(f => f.name === 'package.json' || f.name.endsWith('/package.json'))
+      .sort((a, b) => a.name.split('/').length - b.name.split('/').length);
+    const rootPackage = manifestFiles[0];
     if (rootPackage && rootPackage.content) {
       try {
         const pkg = JSON.parse(rootPackage.content);
         if (pkg.workspaces) {
           isMonorepo = true;
-          workspaces.push(...(Array.isArray(pkg.workspaces) ? pkg.workspaces : pkg.workspaces.packages || []));
+          const workspaceList = Array.isArray(pkg.workspaces) ? pkg.workspaces : pkg.workspaces.packages || [];
+          workspaces.push(...workspaceList);
         }
-      } catch { /* Ignore parse errors */ }
+      } catch (e) {
+        console.warn(`RIEAnalyzer: Failed to parse ${rootPackage.name}`, e);
+      }
     }
     const languageCounts: Record<string, number> = {};
     const dependencies: DependencyEdge[] = [];
@@ -25,12 +32,12 @@ export class RIEAnalyzer {
       const ext = parts.length > 1 ? parts.pop()?.toLowerCase() || '' : 'unknown';
       const lang = this.detectLanguage(ext);
       languageCounts[lang] = (languageCounts[lang] || 0) + 1;
-      const fileName = f.name.split('/').pop() || '';
-      // Advanced dependency heuristics: Look for imports and index hubs
+      const pathParts = f.name.split('/');
+      const fileName = pathParts.pop() || '';
+      // Architectural hub heuristic
       if (fileName === 'index.ts' || fileName === 'index.js') {
-        // Architectural hub
-        const parentDir = f.name.split('/').slice(0, -1).join('/');
-        filteredFiles.slice(0, 5).forEach(other => {
+        const parentDir = pathParts.join('/');
+        filteredFiles.slice(0, 10).forEach(other => {
           if (other.name !== f.name && other.name.startsWith(parentDir)) {
             dependencies.push({ source: other.name, target: f.name, type: 'static' });
           }
