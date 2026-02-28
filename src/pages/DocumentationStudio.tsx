@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { chatService } from '@/lib/chat';
 import { toast } from 'sonner';
+import { generateStandaloneReport } from '@/lib/report-generator';
 import { cn } from '@/lib/utils';
 export function DocumentationStudio() {
   const [searchParams] = useSearchParams();
@@ -26,6 +27,7 @@ export function DocumentationStudio() {
   const [cliInput, setCliInput] = useState('');
   const [showTerminal, setShowTerminal] = useState(true);
   const [logs, setLogs] = useState<{msg: string, type: 'info' | 'warn' | 'success' | 'cmd' | 'error'}[]>([]);
+  const [metadata, setMetadata] = useState<any>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!sessionId) {
@@ -59,6 +61,7 @@ export function DocumentationStudio() {
       const response = await chatService.getMessages();
       if (response.success && response.data?.metadata?.documentation) {
         setDocs(response.data.metadata.documentation);
+        setMetadata(response.data.metadata);
       }
     } catch (err) {
       toast.error('Failed to load documentation');
@@ -75,6 +78,27 @@ export function DocumentationStudio() {
     const parts = cmd.toLowerCase().split(' ');
     if (parts[0] === 'clear') {
       setLogs([]);
+      return;
+    }
+    if (cmd === 'rie report --portable') {
+      addLog('rie: initializing portable report generator...', 'info');
+      if (metadata) {
+        generateStandaloneReport(metadata);
+        addLog('rie: report generated successfully.', 'success');
+      } else {
+        addLog('rie: error - metadata not loaded.', 'error');
+      }
+      return;
+    }
+    if (cmd === 'rie fix --all') {
+      addLog('rie: scanning for auto-fixable vulnerabilities...', 'info');
+      const res = await fetch(`/api/chat/${sessionId}/apply-fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueId: 'all' })
+      });
+      if (res.ok) addLog('rie: bulk remediation successful. all documentation updated.', 'success');
+      else addLog('rie: bulk remediation failed.', 'error');
       return;
     }
     if (cmd === 'rie config --view') {

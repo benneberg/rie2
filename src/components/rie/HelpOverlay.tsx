@@ -29,12 +29,24 @@ The dashboard provides a deterministic X-ray of your software architecture:
 Interact with the RIE core via the terminal simulator or generate documentation:
 - \`rie validate --strict\`: Audit code against defined governance policies.
 - \`rie diff\`: Calculate delta metrics between current and baseline snapshots.
-- **Synthesis**: AI-augmented README, ARCHITECTURE, and SECURITY markdown generation using the *ArchLens AI Core*.
+-## 4. Automated Fixing & Remediation
+ArchLens doesn't just identify problems; it fixes them.
+- **Execute_AutoFix**: For issues like 'High Coupling' or 'Security Leaks', clicking fix will automatically inject remediation strategies into your ARCHITECTURE.md or SECURITY.md files.
+- **Stateful Persistence**: These fixes are saved into the repository metadata and reflected in the standalone reports.
+## 5. Enterprise Reporting
+ArchLens supports "Portable Snapshots" for stakeholder review:
+- **Export Report**: Generates a self-contained HTML file with embedded Mermaid.js diagrams and all synthesized artifacts.
+- **CLI Interface**: Use `rie report --portable` in the Studio terminal to generate snapshots.
 ## 4. Governance & Policy (Settings)
 Configure the engine thresholds to suit your project standards:
 - **Security Threshold**: Fail analysis if sensitive files or leaks are detected.
 - **Exclusion Matrix**: Define regex patterns for directories to ignore during mapping.
 - **Thresholds**: Set minimum acceptable scores for architectural health.
+## 6. CLI Command Reference
+- \`rie config --view\`: View current engine parameters.
+- \`rie validate --strict\`: Force a deep recursive health audit.
+- \`rie fix --all\`: Execute all pending auto-fixes sequentially.
+- \`rie report --portable\`: Download the standalone HTML architectural blueprint.
 ---
 *Note: ArchLens uses Cloudflare Workers for processing. Maximum archive size for v4.2 is 10MB.*
 `;

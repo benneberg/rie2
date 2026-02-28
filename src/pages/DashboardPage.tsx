@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { LanguageDistributionChart, RiskRadarChart, FanInFanOutChart } from '@/components/rie/DashboardCharts';
 import { DriftComparison } from '@/components/rie/DriftComparison';
+import { generateStandaloneReport } from '@/lib/report-generator';
 export function DashboardPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -56,7 +57,12 @@ export function DashboardPage() {
         body: JSON.stringify({ issueId })
       });
       if (response.ok) {
-        toast.success('ISSUE_RESOLVED_SIMULATED', { id: toastId });
+        const res = await response.json();
+        if (res.fixType === 'security') {
+          toast.success('SECURITY_POLICY_GENERATED', { id: toastId });
+        } else {
+          toast.success('ARCHITECTURE_REFINED', { id: toastId });
+        }
         await fetchMetadata();
       }
     } finally {
@@ -107,6 +113,9 @@ export function DashboardPage() {
           <div className="flex gap-4">
             <Button variant="outline" onClick={() => setIsComparing(!isComparing)} className={cn("btn-brutal-dark", isComparing && "bg-primary/20")}>
               {isComparing ? 'Close_Drift' : 'Drift_Analysis'}
+            </Button>
+            <Button variant="outline" onClick={() => metadata && generateStandaloneReport(metadata)} className="btn-brutal-dark">
+              Export_Report
             </Button>
             {!metadata.baseline && (
               <Button variant="outline" onClick={setAsBaseline} className="btn-brutal-dark">Set_Baseline</Button>

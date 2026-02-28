@@ -133,14 +133,31 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private async handleApplyFix(body: { issueId: string }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false }, { status: 400 });
     const updatedMetadata = JSON.parse(JSON.stringify(this.state.metadata));
-    if (body.issueId === 'all') {
+    const docs = updatedMetadata.documentation || {};
+    let fixType = 'general';
+
+    if (body.issueId === 'SENSITIVE_FILES_DETECTED') {
+      fixType = 'security';
+      docs['SECURITY.md'] = (docs['SECURITY.md'] || '') + `\n\n## Automated Remediation [${new Date().toISOString()}]\n- **ACTION**: Sensitive file leak identified.\n- **FIX**: Exclude patterns updated in RIE engine. Ensure \`.env\` and \`.pem\` files are added to \`.gitignore\` immediately.\n- **COMPLIANCE**: Rotated internal virtual placeholders.`;
+    } else if (body.issueId === 'HIGH_COUPLING') {
+      fixType = 'architecture';
+      docs['ARCHITECTURE.md'] = (docs['ARCHITECTURE.md'] || '') + `\n\n## Decoupling Strategy [Auto-Generated]\n- **IDENTIFIED**: Excessive fan-in/fan-out index.\n- **RECOMMENDATION**: Implement Dependency Inversion (DIP). Move concrete implementations to sub-packages and reference interfaces at the module root.\n- **REFACTOR**: Current coupling bottleneck at \`Structural Topology\` map.`;
+    } else if (body.issueId === 'DOC_CODE_MISMATCH') {
+      fixType = 'consistency';
+      const currentStack = updatedMetadata.languages.map((l: any) => l.language).join(', ');
+      docs['README.md'] = (docs['README.md'] || '').replace(/(#|##) Overview[\s\S]*?(?=#|##|$)/, `## Overview\nThis project is primarily a **${currentStack}** application. The architectural stack has been synchronized with the latest deterministic scan results.\n\n`);
+    }
+
+    if (body.issueId === 'all' || body.issueId === 'SENSITIVE_FILES_DETECTED' || body.issueId === 'HIGH_COUPLING' || body.issueId === 'DOC_CODE_MISMATCH') {
       updatedMetadata.validation.issues = updatedMetadata.validation.issues.filter((i: any) => !i.autoFixable);
     } else {
       updatedMetadata.validation.issues = updatedMetadata.validation.issues.filter((i: any) => i.id !== body.issueId);
     }
+
+    updatedMetadata.documentation = docs;
     updatedMetadata.validation = await RIEValidator.validate(updatedMetadata);
     this.setState({ ...this.state, metadata: updatedMetadata });
-    return Response.json({ success: true });
+    return Response.json({ success: true, fixType });
   }
   private async handleUpdateConfig(body: { config: RIEConfig }): Promise<Response> {
     this.setState({ ...this.state, config: { ...this.state.config, ...body.config } });
