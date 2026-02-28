@@ -1,18 +1,23 @@
 import { RepositoryMetadata, FileEntry, LanguageDetection, DependencyEdge, RIEConfig } from '../src/lib/rie-types';
 export class RIEAnalyzer {
   static async analyze(repoName: string, files: any[], config?: RIEConfig): Promise<RepositoryMetadata> {
-    const defaultExclude = ['node_modules', '.git', 'dist', 'build', '.next'];
-    const excludeList = config?.excludePatterns || defaultExclude;
-    const filteredFiles = files.filter(f => !excludeList.some(pattern => f.name.includes(pattern)));
+    const excludeList = (config?.excludePatterns || []).map(p => p.toLowerCase());
+    const filteredFiles = files.filter(f => !excludeList.some(pattern => f.name.toLowerCase().includes(pattern)));
     const totalFiles = filteredFiles.length;
     const totalSize = filteredFiles.reduce((acc, f) => acc + (f.size || 0), 0);
-    // Monorepo Detection
-    const packageJson = files.find(f => f.name === 'package.json');
-    const lernaJson = files.find(f => f.name === 'lerna.json');
-    const pnpmWorkspace = files.find(f => f.name === 'pnpm-workspace.yaml');
-    let isMonorepo = !!(lernaJson || pnpmWorkspace);
-    let workspaces: string[] = [];
-    // Language & Architecture Detection
+    // Monorepo & Workspace mapping
+    const workspaces: string[] = [];
+    let isMonorepo = false;
+    const rootPackage = files.find(f => f.name === 'package.json');
+    if (rootPackage && rootPackage.content) {
+      try {
+        const pkg = JSON.parse(rootPackage.content);
+        if (pkg.workspaces) {
+          isMonorepo = true;
+          workspaces.push(...(Array.isArray(pkg.workspaces) ? pkg.workspaces : pkg.workspaces.packages || []));
+        }
+      } catch { /* Ignore parse errors */ }
+    }
     const languageCounts: Record<string, number> = {};
     const dependencies: DependencyEdge[] = [];
     const structure: FileEntry[] = filteredFiles.map(f => {
@@ -21,18 +26,15 @@ export class RIEAnalyzer {
       const lang = this.detectLanguage(ext);
       languageCounts[lang] = (languageCounts[lang] || 0) + 1;
       const fileName = f.name.split('/').pop() || '';
-      // Heuristic parsing for dependencies
-      if (f.name.includes('src/components')) {
-        const targets = filteredFiles.filter(other =>
-          (other.name.includes('src/hooks') || other.name.includes('src/lib')) &&
-          ['ts', 'js', 'tsx'].includes(other.name.split('.').pop() || '')
-        ).slice(0, 1);
-        targets.forEach(t => dependencies.push({ source: f.name, target: t.name, type: 'import' }));
-      }
-      if (fileName === 'package.json' && f.name !== 'package.json') {
-        const workspacePath = f.name.replace('/package.json', '');
-        workspaces.push(workspacePath);
-        isMonorepo = true;
+      // Advanced dependency heuristics: Look for imports and index hubs
+      if (fileName === 'index.ts' || fileName === 'index.js') {
+        // Architectural hub
+        const parentDir = f.name.split('/').slice(0, -1).join('/');
+        filteredFiles.slice(0, 5).forEach(other => {
+          if (other.name !== f.name && other.name.startsWith(parentDir)) {
+            dependencies.push({ source: other.name, target: f.name, type: 'static' });
+          }
+        });
       }
       return {
         path: f.name,
@@ -50,18 +52,6 @@ export class RIEAnalyzer {
         percentage: Math.round((count / Math.max(1, totalFiles)) * 100)
       }))
       .sort((a, b) => b.fileCount - a.fileCount);
-    const finalConfig: RIEConfig = {
-      excludePatterns: excludeList,
-      analysisMode: config?.analysisMode || 'standard',
-      llmAugmentation: config?.llmAugmentation ?? true,
-      maxFileSize: config?.maxFileSize || 10 * 1024 * 1024,
-      aiModel: config?.aiModel || 'gpt-4o-mini',
-      maxTokens: config?.maxTokens || 4000,
-      maxDepth: config?.maxDepth || 10,
-      temperature: config?.temperature || 0.7,
-      outputDir: config?.outputDir || '.rie',
-      strictValidation: config?.strictValidation ?? false
-    };
     return {
       name: repoName,
       totalFiles,
@@ -72,8 +62,19 @@ export class RIEAnalyzer {
       dependencies: Array.from(new Set(dependencies.map(d => JSON.stringify(d)))).map(s => JSON.parse(s)).slice(0, 50),
       isMonorepo,
       workspaces: [...new Set(workspaces)],
-      config: finalConfig,
-      analyzedAt: Date.now()
+      analyzedAt: Date.now(),
+      config: config || {
+        excludePatterns: [],
+        analysisMode: 'standard',
+        llmAugmentation: true,
+        maxFileSize: 10 * 1024 * 1024,
+        aiModel: 'gpt-4o-mini',
+        maxTokens: 4000,
+        maxDepth: 10,
+        temperature: 0.7,
+        outputDir: '.rie',
+        strictValidation: false
+      }
     };
   }
   private static detectLanguage(ext: string): string {
@@ -81,8 +82,7 @@ export class RIEAnalyzer {
       'ts': 'TypeScript', 'tsx': 'TypeScript', 'js': 'JavaScript', 'jsx': 'JavaScript',
       'py': 'Python', 'go': 'Go', 'rs': 'Rust', 'rb': 'Ruby', 'java': 'Java',
       'cpp': 'C++', 'c': 'C', 'cs': 'C#', 'php': 'PHP', 'html': 'HTML',
-      'css': 'CSS', 'json': 'JSON', 'md': 'Markdown', 'yaml': 'YAML', 'yml': 'YAML',
-      'toml': 'TOML'
+      'css': 'CSS', 'json': 'JSON', 'md': 'Markdown', 'yaml': 'YAML', 'yml': 'YAML'
     };
     return map[ext] || 'Other';
   }

@@ -32,7 +32,21 @@ export class RIEValidator {
       security: 100,
       structure: 100
     };
-    // 1. Advanced Risk Metrics (Fan-in / Fan-out)
+    // 1. Documentation vs Code Consistency Audit
+    const docSummary = (metadata.documentation?.['summary'] || '').toLowerCase();
+    const detectedLangs = metadata.languages.map(l => l.language.toLowerCase());
+    const mismatchFound = detectedLangs.some(lang => lang !== 'other' && docSummary.length > 0 && !docSummary.includes(lang));
+    if (mismatchFound && docSummary.length > 0) {
+      rawScores.consistency -= 30;
+      issues.push({
+        id: 'DOC_CODE_MISMATCH',
+        severity: 'medium',
+        category: 'consistency',
+        message: 'Documentation summary does not align with detected project stack.',
+        suggestion: 'Re-generate documentation studio artifacts to sync with structural data.'
+      });
+    }
+    // 2. Risk Metrics
     const fanInMap = new Map<string, number>();
     const fanOutMap = new Map<string, number>();
     metadata.dependencies.forEach(d => {
@@ -42,97 +56,87 @@ export class RIEValidator {
     const fanInMax = Math.max(0, ...Array.from(fanInMap.values()));
     const fanOutMax = Math.max(0, ...Array.from(fanOutMap.values()));
     const couplingIndex = (fanInMax + fanOutMax) / 2;
-    // 2. Structural & Layer Violations
-    const maxNesting = Math.max(0, ...metadata.structure.map(f => f.path.split('/').length));
-    if (maxNesting > 8) {
+    // 3. Structure & Layer Integrity
+    if (couplingIndex > 15) {
+      rawScores.structure -= 20;
+      issues.push({
+        id: 'HIGH_COUPLING',
+        severity: 'high',
+        category: 'structure',
+        message: `High architectural coupling detected (Index: ${couplingIndex.toFixed(1)}).`,
+        suggestion: 'Introduce interface abstractions to decouple component relationships.',
+        autoFixable: true
+      });
+    }
+    // 4. Security Audit (Secret Scanning Simulation)
+    const sensitiveFiles = metadata.structure.filter(f => 
+      ['.env', '.pem', '.key', 'id_rsa'].some(pattern => f.name.toLowerCase().includes(pattern))
+    );
+    if (sensitiveFiles.length > 0) {
+      rawScores.security -= 60;
+      issues.push({
+        id: 'SENSITIVE_FILES_DETECTED',
+        severity: 'critical',
+        category: 'security',
+        message: 'Security leak: Sensitive files (keys/env) found in archive.',
+        suggestion: 'Remove secrets from source control and rotate credentials immediately.',
+        autoFixable: true
+      });
+    }
+    // 5. Monorepo Specific Checks
+    if (metadata.isMonorepo && (!metadata.workspaces || metadata.workspaces.length === 0)) {
       rawScores.structure -= 15;
       issues.push({
-        id: 'DEEP_NESTING',
+        id: 'INVALID_MONOREPO_CFG',
         severity: 'medium',
         category: 'structure',
-        message: `Deep nesting detected: ${maxNesting} levels.`,
-        suggestion: 'Flatten structure to improve module discoverability.'
+        message: 'Monorepo detected but no workspace boundaries identified.',
+        suggestion: 'Define "workspaces" field in root package.json for better mapping.'
       });
     }
-    // 3. Completeness & Policy
-    const hasReadme = metadata.structure.some(f => f.name.toLowerCase().includes('readme.md'));
-    const hasArch = metadata.structure.some(f => f.name.toLowerCase().includes('architecture.md'));
-    if (!hasReadme) rawScores.completeness -= 40;
-    if (!hasArch) rawScores.completeness -= 30;
-    // 4. Security Audit
-    const sensitiveExtensions = ['.env', '.pem', '.key', '.p12'];
-    const securityLeads = metadata.structure.filter(f => sensitiveExtensions.some(ext => f.path.endsWith(ext)));
-    if (securityLeads.length > 0) {
-      rawScores.security -= 50;
-      issues.push({
-        id: 'SENSITIVE_FILES',
-        severity: 'critical',
-        category: 'security',
-        message: 'Potential secret/config exposure in archive.',
-        suggestion: 'Scrub .env and private keys from distribution.'
-      });
-    }
-    // 5. Governance Enforcement
-    if (rawScores.security < policy.minSecurityScore) {
-      issues.push({
-        id: 'POLICY_VIOLATION_SECURITY',
-        severity: 'critical',
-        category: 'security',
-        message: `Security score (${rawScores.security}) below policy threshold (${policy.minSecurityScore}).`,
-        suggestion: 'Review security findings immediately.'
-      });
-    }
-    // 6. Heatmap Generation
+    // 6. Weighted Scoring Calculation
+    // Security: 35%, Structure: 25%, Consistency: 20%, Completeness: 20%
+    const finalScore = Math.round(
+      (rawScores.security * 0.35) +
+      (rawScores.structure * 0.25) +
+      (rawScores.consistency * 0.20) +
+      (rawScores.completeness * 0.20)
+    );
+    // 7. Heatmap Generation
     const dirs = new Map<string, { count: number; nesting: number; coupling: number }>();
     metadata.structure.forEach(f => {
       const parts = f.path.split('/');
-      if (parts.length > 1) {
-        const parent = parts[0];
-        const current = dirs.get(parent) || { count: 0, nesting: 0, coupling: 0 };
-        current.count++;
-        current.nesting = Math.max(current.nesting, parts.length);
-        current.coupling += (fanInMap.get(f.path) || 0);
-        dirs.set(parent, current);
-      }
+      const parent = parts.length > 1 ? parts[0] : 'root';
+      const current = dirs.get(parent) || { count: 0, nesting: 0, coupling: 0 };
+      current.count++;
+      current.nesting = Math.max(current.nesting, parts.length);
+      current.coupling += (fanInMap.get(f.path) || 0);
+      dirs.set(parent, current);
     });
     dirs.forEach((val, key) => {
-      const risk = Math.min(100, (val.count / 20) * 30 + (val.nesting * 5) + (val.coupling * 2));
+      const risk = Math.min(100, (val.count / 10) * 20 + (val.nesting * 5) + (val.coupling * 2));
       heatmap.push({
         path: key,
         riskScore: Math.round(risk),
-        riskLevel: risk > 75 ? 'critical' : risk > 50 ? 'high' : risk > 25 ? 'medium' : 'low',
+        riskLevel: risk > 70 ? 'critical' : risk > 45 ? 'high' : risk > 20 ? 'medium' : 'low',
         fileCount: val.count
       });
     });
-    const finalScore = Math.round(
-      (rawScores.structure * 0.20) +
-      (rawScores.consistency * 0.25) +
-      (rawScores.security * 0.30) +
-      (rawScores.completeness * 0.25)
-    );
-    const riskMetrics: RiskMetrics = {
-      fanInMax,
-      fanOutMax,
-      couplingIndex,
-      isolationScore: 100 - couplingIndex,
-      hasCircularDeps: couplingIndex > 40, // Heuristic
-      hotspotPaths: Array.from(dirs.entries())
-        .filter(([_, v]) => v.coupling > 10)
-        .map(([k, _]) => k)
-    };
-    if (!hasReadme) recommendations.push("Synthesize a Production README.md to define system purpose.");
-    if (securityLeads.length > 0) recommendations.push("Immediate Audit: Remove .env and credential files from source.");
     return {
       score: finalScore,
       categories: rawScores,
       checks,
-      issues: issues.sort((a, b) => {
-        const p = { critical: 0, high: 1, medium: 2, low: 3 };
-        return p[a.severity] - p[b.severity];
-      }),
+      issues: issues.sort((a, b) => (a.severity === 'critical' ? -1 : 1)),
       heatmap,
-      recommendations,
-      riskMetrics,
+      recommendations: issues.map(i => i.suggestion || ''),
+      riskMetrics: {
+        fanInMax,
+        fanOutMax,
+        couplingIndex,
+        isolationScore: Math.max(0, 100 - couplingIndex * 5),
+        hasCircularDeps: couplingIndex > 30,
+        hotspotPaths: Array.from(dirs.entries()).filter(e => e[1].coupling > 5).map(e => e[0])
+      },
       updatedAt: Date.now()
     };
   }

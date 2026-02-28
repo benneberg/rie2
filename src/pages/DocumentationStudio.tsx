@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { FileText, Download, Sparkles, Loader2, ChevronLeft, CloudUpload, Terminal as TerminalIcon, Eye, Zap, Code, ShieldCheck, DownloadCloud } from 'lucide-react';
+import { FileText, ChevronLeft, Terminal as TerminalIcon, Eye, Zap, Code, ShieldCheck, DownloadCloud, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,7 +23,7 @@ export function DocumentationStudio() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [cliInput, setCliInput] = useState('');
-  const [logs, setLogs] = useState<{msg: string, type: 'info' | 'warn' | 'success' | 'cmd'}[]>([]);
+  const [logs, setLogs] = useState<{msg: string, type: 'info' | 'warn' | 'success' | 'cmd' | 'error'}[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!sessionId) {
@@ -38,7 +38,7 @@ export function DocumentationStudio() {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
   }, [logs]);
-  const addLog = (msg: string, type: 'info' | 'warn' | 'success' | 'cmd' = 'info') => {
+  const addLog = (msg: string, type: 'info' | 'warn' | 'success' | 'cmd' | 'error' = 'info') => {
     setLogs(prev => [...prev, { msg: `[${new Date().toLocaleTimeString()}] ${msg}`, type }]);
   };
   const fetchDocs = async () => {
@@ -56,10 +56,11 @@ export function DocumentationStudio() {
   const handleCommand = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cliInput.trim()) return;
-    const cmd = cliInput.trim().toLowerCase();
-    addLog(cliInput, 'cmd');
+    const cmd = cliInput.trim();
+    addLog(cmd, 'cmd');
     setCliInput('');
-    if (cmd === 'clear') {
+    const parts = cmd.toLowerCase().split(' ');
+    if (parts[0] === 'clear') {
       setLogs([]);
       return;
     }
@@ -71,14 +72,36 @@ export function DocumentationStudio() {
     }
     if (cmd === 'rie validate --strict') {
       addLog('rie: performing deep recursive audit...', 'info');
-      setTimeout(() => addLog('rie: validation cycle complete. health: 85%. 0 violations.', 'success'), 800);
+      const response = await chatService.getMessages();
+      const score = response.data?.metadata?.validation?.score || 0;
+      setTimeout(() => {
+        if (score >= 80) {
+          addLog(`rie: validation success. health: ${score}%. exit code: 0`, 'success');
+        } else {
+          addLog(`rie: validation failure. health: ${score}% < 80%. exit code: 1`, 'error');
+        }
+      }, 800);
       return;
     }
-    if (cmd === 'rie export --html') {
-      handleHTMLReportExport();
+    if (cmd === 'rie diff') {
+      addLog('rie: calculating drift against baseline...', 'info');
+      const response = await chatService.getMessages();
+      const drift = response.data?.metadata?.drift;
+      if (drift) {
+        addLog(`rie: drift detected. delta: ${drift.delta}%. added: ${drift.addedFiles}.`, 'warn');
+      } else {
+        addLog('rie: no baseline found to diff against.', 'error');
+      }
       return;
     }
-    addLog(`Unknown command: ${cmd}. Usage: rie scan, rie validate --strict, rie export --html, clear`, 'warn');
+    if (cmd === 'rie scan --json') {
+      addLog('rie: exporting structural metadata...', 'info');
+      const response = await chatService.getMessages();
+      addLog(JSON.stringify(response.data?.metadata?.structure?.slice(0, 5) || [], null, 2), 'info');
+      addLog('rie: ... (truncated)', 'info');
+      return;
+    }
+    addLog(`Unknown command. Usage: rie scan --json, rie validate --strict, rie diff, clear`, 'warn');
   };
   const handleHTMLReportExport = async () => {
     setIsExporting(true);
@@ -88,35 +111,16 @@ export function DocumentationStudio() {
     if (response.success && response.data?.metadata) {
       const meta = response.data.metadata;
       setExportProgress(40);
-      addLog('rie: embedding structural graphs and scores...', 'info');
       const htmlContent = `
         <!DOCTYPE html>
         <html>
-        <head>
-          <title>ArchLens Analysis: ${meta.name || 'Unknown'}</title>
-          <style>
-            body { font-family: sans-serif; background: #070911; color: #dde4f4; padding: 40px; }
-            .card { background: #0b0e18; border: 1px solid #181e30; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-            h1 { color: #f59e0b; border-bottom: 2px solid #f59e0b; padding-bottom: 10px; }
-            .score { font-size: 48px; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <h1>${(meta.name || 'UNKNOWN').toUpperCase()} ARCHITECTURAL REPORT</h1>
-          <div class="card">
-            <div class="score">${meta.validation?.score || 0}%</div>
+        <head><title>ArchLens: ${meta.name}</title></head>
+        <body style="background:#070911;color:#dde4f4;padding:40px;font-family:sans-serif;">
+          <h1>${meta.name.toUpperCase()} REPORT</h1>
+          <div style="background:#0b0e18;padding:20px;border:1px solid #181e30;">
+            <div style="font-size:48px;">${meta.validation?.score || 0}%</div>
             <p>HEALTH SCORE</p>
           </div>
-          <div class="card">
-            <h2>SYSTEM SUMMARY</h2>
-            <p>${meta.documentation?.summary || 'No summary generated.'}</p>
-          </div>
-          <div class="card">
-            <h2>FILES ANALYZED</h2>
-            <p>TOTAL: ${meta.totalFiles || 0}</p>
-            <p>STACK: ${meta.primaryLanguage || 'Unknown'}</p>
-          </div>
-          <footer>GENERATE BY ARCHLENS_PRO_ENGINEER_V4.2</footer>
         </body>
         </html>
       `;
@@ -126,25 +130,12 @@ export function DocumentationStudio() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `rie-report-${meta.name || 'unknown'}.html`;
+        a.download = `report-${meta.name}.html`;
         a.click();
-        addLog('rie: report-export.html generated successfully.', 'success');
+        addLog('rie: html report generated.', 'success');
         setIsExporting(false);
         setExportProgress(100);
-        toast.success('Report Exported');
       }, 1000);
-    }
-  };
-  const handleExportContext = async () => {
-    const response = await chatService.getMessages();
-    if (response.success && response.data?.metadata) {
-      const blob = new Blob([JSON.stringify(response.data.metadata, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `archlens-context-${response.data.metadata.name || 'unknown'}.json`;
-      a.click();
-      addLog('rie: full llm context exported for rag usage.', 'success');
     }
   };
   const generateDoc = async (docType: string) => {
@@ -160,15 +151,16 @@ export function DocumentationStudio() {
       if (result.success) {
         setDocs(prev => ({ ...prev, [docType]: result.content }));
         setActiveDoc(docType);
-        addLog(`rie: synthesis successful. ${docType} updated.`, 'success');
+        addLog(`rie: synthesis successful.`, 'success');
       }
     } catch (err) {
-      addLog(`rie: synthesis error for ${docType}`, 'warn');
+      addLog(`rie: synthesis error.`, 'error');
     } finally {
       setIsGenerating(false);
     }
   };
   const exportGitHubAction = () => {
+    // Fixed: Escape ${{ }} by breaking the string or using placeholders to avoid Vite parser conflict
     const workflow = `name: ArchLens Architectural Guardrail
 on: [push, pull_request]
 jobs:
@@ -179,15 +171,15 @@ jobs:
       - name: ArchLens Core Scan
         uses: archlens/action-rie-core@v1
         with:
-          session_id: ${{ inputs.session_id || '${sessionId || 'default-session'}' }}
+          session_id: \${{ inputs.session_id || '${sessionId || 'default-session'}' }}
           threshold: 80
           fail_on_drift: true
         env:
-          ARCHLENS_TOKEN: ${{ secrets.ARCHLENS_TOKEN }}
+          ARCHLENS_TOKEN: \${{ secrets.ARCHLENS_TOKEN }}
 `.trim();
     setDocs(prev => ({ ...prev, 'archlens.yml': workflow }));
     setActiveDoc('archlens.yml');
-    addLog('rie: github action workflow generated for ci/cd pipelines.', 'success');
+    addLog('rie: github action workflow generated.', 'success');
   };
   if (isLoading) return <AppLayout container><Skeleton className="h-[600px] glass" /></AppLayout>;
   return (
@@ -204,9 +196,6 @@ jobs:
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="btn-brutal-dark" onClick={handleExportContext}>
-              <DownloadCloud className="w-4 h-4 mr-2" /> JSON Context
-            </Button>
             <Button onClick={handleHTMLReportExport} className="btn-brutal-amber">
               <Code className="w-4 h-4 mr-2" /> HTML Report
             </Button>
@@ -244,11 +233,6 @@ jobs:
             <Card className="flex-1 min-h-[500px] flex flex-col glass border-border overflow-hidden shadow-brutal-dark">
               <div className="flex items-center justify-between px-6 py-3 border-b bg-white/5">
                 <span className="font-mono text-[10px] font-bold text-muted-foreground tracking-widest uppercase">{activeDoc}</span>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" className="text-[9px] font-bold tracking-widest uppercase h-7">
-                    <Eye className="w-3.5 h-3.5 mr-1" /> View_Preview
-                  </Button>
-                </div>
               </div>
               <ScrollArea className="flex-1">
                 <div className="p-10">
@@ -272,16 +256,15 @@ jobs:
                 <div className="flex items-center gap-2 text-[9px] font-mono font-bold text-zinc-500 tracking-[0.2em] uppercase">
                   <TerminalIcon className="w-3 h-3" /> RIE-CORE_CLI_V4.2
                 </div>
-                {isExporting && (
-                  <div className="flex items-center gap-4 px-2">
-                    <span className="text-[9px] text-primary animate-pulse uppercase tracking-widest">Generating_Report...</span>
-                    <Progress value={exportProgress} className="w-24 h-1.5" />
-                  </div>
-                )}
+                {isExporting && <Progress value={exportProgress} className="w-24 h-1.5" />}
               </div>
               <div ref={terminalRef} className="flex-1 p-4 font-mono text-[10px] overflow-y-auto space-y-1">
                 {logs.map((log, i) => (
-                  <div key={i} className={cn("flex gap-2", log.type === 'success' ? 'text-emerald-400' : log.type === 'warn' ? 'text-amber-400' : log.type === 'cmd' ? 'text-sky-400' : 'text-zinc-400')}>
+                  <div key={i} className={cn("flex gap-2", 
+                    log.type === 'success' ? 'text-emerald-400' : 
+                    log.type === 'warn' ? 'text-amber-400' : 
+                    log.type === 'error' ? 'text-red-400' :
+                    log.type === 'cmd' ? 'text-sky-400' : 'text-zinc-400')}>
                     <span className="opacity-30">{log.type === 'cmd' ? '➜' : '◈'}</span>
                     <span>{log.msg}</span>
                   </div>

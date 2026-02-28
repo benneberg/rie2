@@ -1,20 +1,20 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/rie/StatsCard';
 import { DependencyGraph } from '@/components/rie/DependencyGraph';
-import { RepositoryMetadata, ValidationIssue, HeatmapNode } from '@/lib/rie-types';
+import { RepositoryMetadata } from '@/lib/rie-types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { motion } from 'framer-motion';
-import { Files, Code2, Database, AlertTriangle, Github, HardDrive, Box, ChevronRight, LayoutGrid, Zap, Info, TrendingUp, TrendingDown, Anchor, Activity } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Files, Code2, Database, AlertTriangle, Github, HardDrive, Box, LayoutGrid, Zap, TrendingUp, TrendingDown, Anchor, Activity, Wrench } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 export function DashboardPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -22,16 +22,7 @@ export function DashboardPage() {
   const [metadata, setMetadata] = useState<RepositoryMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isComparing, setIsComparing] = useState(false);
-
-  const establishBaseline = async () => {
-    const toastId = toast.loading('FREEZING_BASELINE...');
-    try {
-      await fetch(`/api/chat/${sessionId}/create-baseline`, { method: 'POST' });
-      fetchMetadata();
-      toast.success('BASELINE_ESTABLISHED', { id: toastId });
-    } catch (e) { toast.error('BASELINE_FAILED'); }
-  };
-
+  const [fixingId, setFixingId] = useState<string | null>(null);
   const fetchMetadata = useCallback(async () => {
     try {
       const response = await chatService.getMessages();
@@ -52,11 +43,28 @@ export function DashboardPage() {
       navigate('/');
     }
   }, [sessionId, navigate, fetchMetadata]);
-  if (isLoading) return <AppLayout container><Skeleton className="h-[600px] w-full glass animate-pulse" /></AppLayout>;
-  if (!metadata) return <AppLayout container><div className="text-center py-20 font-display text-4xl uppercase opacity-20">No active session</div></AppLayout>;
+  const applyFix = async (issueId: string) => {
+    if (!sessionId) return;
+    setFixingId(issueId);
+    const toastId = toast.loading('EXECUTING_AUTO_FIX_SEQUENCE...');
+    try {
+      const response = await fetch(`/api/chat/${sessionId}/apply-fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueId })
+      });
+      if (response.ok) {
+        toast.success('ISSUE_RESOLVED_SIMULATED', { id: toastId });
+        await fetchMetadata();
+      }
+    } finally {
+      setFixingId(null);
+    }
+  };
+  if (isLoading) return <AppLayout container><Skeleton className="h-[600px] w-full glass" /></AppLayout>;
+  if (!metadata) return <AppLayout container><div className="text-center py-20 uppercase opacity-20">No active session</div></AppLayout>;
   const report = metadata.validation;
   const source = metadata.source;
-  const scoreColor = (s: number) => s > 85 ? 'text-emerald-500' : s > 60 ? 'text-amber-500' : 'text-red-500';
   return (
     <AppLayout container>
       <div className="space-y-12">
@@ -64,20 +72,10 @@ export function DashboardPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-primary/30 text-primary uppercase">Report_V4.2</Badge>
-              {metadata.isMonorepo && (
-                <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-[10px] font-bold tracking-widest uppercase">
-                  <Box className="w-3 h-3 mr-1.5" /> Monorepo: {metadata.workspaces?.length} Nodes
-                </Badge>
-              )}
-              {source?.type === 'github' ? (
-                <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-white/20 text-white/50 flex gap-1.5 items-center uppercase">
-                  <Github className="w-3.5 h-3.5" /> {source.repo}
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-white/20 text-white/50 flex gap-1.5 items-center uppercase">
-                  <HardDrive className="w-3.5 h-3.5" /> Static_Archive
-                </Badge>
-              )}
+              {metadata.isMonorepo && <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-[10px] font-bold uppercase tracking-widest">MONOREPO</Badge>}
+              <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-white/20 text-white/50 uppercase">
+                {source?.type === 'github' ? <><Github className="w-3.5 h-3.5 mr-1" /> {source.repo}</> : <><HardDrive className="w-3.5 h-3.5 mr-1" /> ARCHIVE</>}
+              </Badge>
             </div>
             <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-none">{metadata.name}</h1>
           </div>
@@ -85,16 +83,13 @@ export function DashboardPage() {
             <Button variant="outline" onClick={() => setIsComparing(!isComparing)} className={cn("btn-brutal-dark", isComparing && "bg-primary/20")}>
               {isComparing ? 'Exit_Drift' : 'Drift_Analysis'}
             </Button>
-            {!metadata.baseline && <Button onClick={establishBaseline} className="btn-brutal-dark">Establish_Baseline</Button>}
-            <Button variant="outline" onClick={() => navigate(`/studio?session=${sessionId}`)} className="btn-brutal-dark">Artifact Studio</Button>
-            <Button onClick={() => navigate(`/settings?session=${sessionId}`)} className="btn-brutal-amber">Configure_Engine</Button>
+            <Button onClick={() => navigate(`/studio?session=${sessionId}`)} className="btn-brutal-amber">Artifact Studio</Button>
           </div>
         </header>
-
         {isComparing && metadata.drift && (
-          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="p-6 glass border-l-4 border-l-primary shadow-brutal-dark flex flex-wrap gap-8 items-center justify-between">
-             <div className="space-y-1">
-               <div className="text-[10px] font-black uppercase tracking-widest text-primary">Baseline_Drift_Report</div>
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="p-6 glass border-l-4 border-l-primary shadow-brutal-dark flex justify-between items-center">
+             <div>
+               <div className="text-[10px] font-black uppercase text-primary mb-1">Architecture_Drift</div>
                <div className="flex items-center gap-3">
                   <div className={cn("text-3xl font-stats", metadata.drift.delta >= 0 ? "text-emerald-500" : "text-red-500")}>
                     {metadata.drift.delta > 0 ? '+' : ''}{metadata.drift.delta}%
@@ -102,69 +97,24 @@ export function DashboardPage() {
                   {metadata.drift.delta < 0 ? <TrendingDown className="text-red-500 w-6 h-6" /> : <TrendingUp className="text-emerald-500 w-6 h-6" />}
                </div>
              </div>
-             <div className="flex gap-8">
-                <div className="text-center">
-                  <div className="text-xl font-stats">{metadata.drift.addedFiles}</div>
-                  <div className="text-[8px] font-mono uppercase opacity-50">Files_Added</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xl font-stats">{metadata.drift.newDependencies}</div>
-                  <div className="text-[8px] font-mono uppercase opacity-50">New_Edges</div>
-                </div>
-             </div>
-             <div className="max-w-md text-[10px] font-mono uppercase opacity-70 leading-relaxed">
-               {metadata.drift.regressions.length > 0 ? `WARNING: ${metadata.drift.regressions[0]}` : "No critical architectural regressions detected since baseline."}
+             <div className="text-[10px] font-mono opacity-60 uppercase">
+               Last Sync: {new Date(metadata.drift.timestamp).toLocaleTimeString()}
              </div>
           </motion.div>
         )}
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {report?.categories && Object.entries(report.categories).map(([cat, score]) => {
-            const prevScore = isComparing && metadata.baseline?.validation?.categories ? (metadata.baseline.validation.categories as any)[cat] : null;
-            return (
-            <Card key={cat} className="glass overflow-hidden border-b-2 border-b-primary/20">
+          {report?.categories && Object.entries(report.categories).map(([cat, score]) => (
+            <Card key={cat} className="glass border-b-2 border-b-primary/20">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">{cat}</span>
-                  <div className="flex items-center gap-2">
-                    {prevScore !== null && (
-                      <span className={cn("text-[10px] font-stats", score >= prevScore ? "text-emerald-500" : "text-red-500")}>
-                        {score >= prevScore ? '+' : ''}{(score - prevScore).toFixed(0)}%
-                      </span>
-                    )}
-                    <div className={cn("text-2xl font-stats", scoreColor(score))}>{score}%</div>
-                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">{cat}</span>
+                  <div className={cn("text-2xl font-stats", score > 80 ? 'text-emerald-500' : 'text-amber-500')}>{score}%</div>
                 </div>
-                <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                  <motion.div
-                    className={cn(
-                      "h-full origin-left",
-                      score > 85 ? 'bg-emerald-500' : score > 60 ? 'bg-amber-500' : 'bg-red-500'
-                    )}
-                    initial={{ width: 0 }}
-                    animate={{ width: `${score}%` }}
-                    transition={{ duration: 1.5, ease: "easeOut" }}
-                  />
-                </div>
+                <Progress value={score} className="h-1 bg-white/5" />
               </CardContent>
             </Card>
-          )})}
+          ))}
         </div>
-        {report?.recommendations?.length > 0 && (
-          <div className="p-6 bg-primary/5 border border-primary/20 rounded-xl space-y-4">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-primary" />
-              <h3 className="text-[10px] font-black uppercase tracking-widest">High_Impact_Fixes</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {report.recommendations.map((rec, i) => (
-                <div key={i} className="bg-black/20 p-4 border border-white/5 rounded-lg text-[10px] font-mono leading-relaxed opacity-80">
-                   {rec.toUpperCase()}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -172,48 +122,39 @@ export function DashboardPage() {
                 <CardContent className="p-6">
                    <div className="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-2 flex items-center gap-2"><Anchor className="w-3 h-3" /> Isolation_Score</div>
                    <div className="text-4xl font-stats">{metadata.validation?.riskMetrics?.isolationScore || 0}%</div>
-                   <div className="text-[9px] font-mono uppercase opacity-40 mt-1">Resistance to system-wide regression</div>
                 </CardContent>
               </Card>
               <Card className="glass border-l-4 border-l-amber-500">
                 <CardContent className="p-6">
                    <div className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2 flex items-center gap-2"><Activity className="w-3 h-3" /> Coupling_Index</div>
                    <div className="text-4xl font-stats">{(metadata.validation?.riskMetrics?.couplingIndex || 0).toFixed(1)}</div>
-                   <div className="text-[9px] font-mono uppercase opacity-40 mt-1">Avg nodes per architectural cluster</div>
                 </CardContent>
               </Card>
             </div>
-
-            <Card className="glass border-border shadow-brutal-dark">
+            <Card className="glass shadow-brutal-dark">
               <CardContent className="p-6">
                 <div className="flex justify-between items-center mb-8">
                   <div className="flex items-center gap-2">
                     <LayoutGrid className="w-4 h-4 text-primary" />
                     <h3 className="text-xs font-black uppercase tracking-widest">Risk_Entropy_Heatmap</h3>
                   </div>
-                  <Badge variant="secondary" className="text-[9px] font-mono">DENSITY_MATRIX_V1</Badge>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                   <TooltipProvider>
                     {report?.heatmap.map((node, i) => (
                       <Tooltip key={i}>
                         <TooltipTrigger asChild>
-                          <div
-                            className={cn(
-                              "aspect-square rounded border transition-all cursor-help flex items-center justify-center font-mono text-[8px] font-bold p-1 overflow-hidden text-center",
-                              node.riskLevel === 'critical' ? 'bg-red-500/60 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]' :
-                              node.riskLevel === 'high' ? 'bg-orange-500/40 border-orange-500/50' :
-                              node.riskLevel === 'medium' ? 'bg-amber-500/20 border-amber-500/30' :
-                              'bg-emerald-500/10 border-emerald-500/20'
-                            )}
-                          >
-                            {node.path.slice(0, 12)}
+                          <div className={cn(
+                            "aspect-square rounded border flex items-center justify-center font-mono text-[8px] font-bold p-1 cursor-help",
+                            node.riskLevel === 'critical' ? 'bg-red-500/60 border-red-500' :
+                            node.riskLevel === 'high' ? 'bg-orange-500/40 border-orange-500/50' :
+                            'bg-emerald-500/10 border-emerald-500/20'
+                          )}>
+                            {node.path.slice(0, 8)}
                           </div>
                         </TooltipTrigger>
-                        <TooltipContent className="bg-midnight border-white/10 p-3 text-[10px] font-mono uppercase space-y-1">
-                          <p className="text-primary font-bold">DIR: {node.path}</p>
-                          <p>Risk: {node.riskScore}%</p>
-                          <p>Files: {node.fileCount}</p>
+                        <TooltipContent>
+                          <p>{node.path} (Risk: {node.riskScore}%)</p>
                         </TooltipContent>
                       </Tooltip>
                     ))}
@@ -221,98 +162,58 @@ export function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-            <div className="glass shadow-brutal-dark min-h-[400px] overflow-hidden">
-              <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
-                <span className="font-display font-bold uppercase tracking-widest text-xs">Structural Topology</span>
-                <Badge variant="secondary" className="text-[9px] font-mono uppercase">Mermaid_Engine_Render</Badge>
-              </div>
+            <div className="glass shadow-brutal-dark overflow-hidden min-h-[400px]">
+              <div className="p-6 border-b border-white/5 bg-white/5 font-display font-bold uppercase text-xs">Structural Topology</div>
               <DependencyGraph dependencies={metadata.dependencies || []} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <StatsCard label="Files_Count" value={metadata.totalFiles?.toString() || '0'} icon={<Files className="w-4 h-4" />} />
-              <StatsCard label="Language_Core" value={metadata.primaryLanguage || 'Unknown'} icon={<Code2 className="w-4 h-4" />} />
-              <StatsCard label="Total_Payload" value={`${((metadata.totalSize || 0) / 1024).toFixed(1)} KB`} icon={<Database className="w-4 h-4" />} />
             </div>
           </div>
           <div className="lg:col-span-4">
             <Card className="glass h-full border-l-4 border-l-primary shadow-brutal-dark">
               <CardContent className="p-0">
                 <Tabs defaultValue="all" className="w-full">
-                  <div className="p-6 border-b border-white/5">
-                    <h3 className="font-display font-bold uppercase tracking-widest text-xs mb-4">Issues Explorer</h3>
-                    <TabsList className="grid w-full grid-cols-3 bg-white/5 border border-white/5 h-10">
-                      <TabsTrigger value="all" className="text-[9px] font-bold uppercase tracking-widest">All</TabsTrigger>
-                      <TabsTrigger value="high" className="text-[9px] font-bold uppercase tracking-widest text-red-400">High</TabsTrigger>
-                      <TabsTrigger value="security" className="text-[9px] font-bold uppercase tracking-widest text-amber-400">Security</TabsTrigger>
+                  <div className="p-6 border-b border-white/5 flex flex-col gap-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-display font-bold uppercase tracking-widest text-xs">Issues Explorer</h3>
+                      <Button variant="outline" size="sm" className="h-7 text-[8px] font-bold uppercase px-2 border-primary/40 text-primary" onClick={() => applyFix('all')}>
+                        <Wrench className="w-3 h-3 mr-1" /> Fix_All
+                      </Button>
+                    </div>
+                    <TabsList className="grid w-full grid-cols-2 bg-white/5 h-10">
+                      <TabsTrigger value="all" className="text-[9px] font-bold uppercase">Critical</TabsTrigger>
+                      <TabsTrigger value="tech-debt" className="text-[9px] font-bold uppercase">Debt</TabsTrigger>
                     </TabsList>
                   </div>
                   <TabsContent value="all" className="p-0">
                     <div className="divide-y divide-white/5">
-                      {report?.issues?.map((issue, idx) => (
-                        <div key={idx} className="p-6 hover:bg-white/5 transition-colors group">
-                          <div className="flex items-start gap-4">
-                            <AlertTriangle className={cn("w-5 h-5 mt-0.5", issue.severity === 'critical' || issue.severity === 'high' ? "text-red-500" : "text-amber-500")} />
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0 border-white/20 opacity-60">
-                                  {issue.category}
-                                </Badge>
-                                {issue.autoFixable && (
-                                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[8px] font-black">AUTO_FIX_READY</Badge>
-                                )}
+                      <AnimatePresence>
+                        {report?.issues?.map((issue) => (
+                          <motion.div 
+                            key={issue.id} 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: fixingId === issue.id ? 0.5 : 1 }} 
+                            exit={{ height: 0, opacity: 0 }}
+                            className="p-6 space-y-3"
+                          >
+                            <div className="flex items-start gap-3">
+                              <AlertTriangle className={cn("w-4 h-4 mt-0.5", issue.severity === 'critical' ? "text-red-500" : "text-amber-500")} />
+                              <div className="flex-1 space-y-1">
+                                <p className="text-[11px] font-bold uppercase leading-tight text-white/90">{issue.message}</p>
+                                <p className="text-[10px] font-mono opacity-40 uppercase tracking-tighter">{issue.suggestion}</p>
                               </div>
-                              <p className="text-[11px] font-bold uppercase tracking-wider leading-tight text-white/90">{issue.message}</p>
-                              <p className="text-[10px] font-mono opacity-50 uppercase tracking-tighter bg-black/20 p-2 rounded">{issue.suggestion}</p>
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="high" className="p-0">
-                    <div className="divide-y divide-white/5">
-                      {report?.issues?.filter(issue => issue.severity === 'high' || issue.severity === 'critical').map((issue, idx) => (
-                        <div key={idx} className="p-6 hover:bg-white/5 transition-colors group">
-                          <div className="flex items-start gap-4">
-                            <AlertTriangle className={cn("w-5 h-5 mt-0.5", issue.severity === 'critical' || issue.severity === 'high' ? "text-red-500" : "text-amber-500")} />
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0 border-white/20 opacity-60">
-                                  {issue.category}
-                                </Badge>
-                                {issue.autoFixable && (
-                                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[8px] font-black">AUTO_FIX_READY</Badge>
-                                )}
-                              </div>
-                              <p className="text-[11px] font-bold uppercase tracking-wider leading-tight text-white/90">{issue.message}</p>
-                              <p className="text-[10px] font-mono opacity-50 uppercase tracking-tighter bg-black/20 p-2 rounded">{issue.suggestion}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="security" className="p-0">
-                    <div className="divide-y divide-white/5">
-                      {report?.issues?.filter(issue => issue.category?.toLowerCase().includes('security')).map((issue, idx) => (
-                        <div key={idx} className="p-6 hover:bg-white/5 transition-colors group">
-                          <div className="flex items-start gap-4">
-                            <AlertTriangle className={cn("w-5 h-5 mt-0.5", issue.severity === 'critical' || issue.severity === 'high' ? "text-red-500" : "text-amber-500")} />
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-center justify-between">
-                                <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0 border-white/20 opacity-60">
-                                  {issue.category}
-                                </Badge>
-                                {issue.autoFixable && (
-                                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[8px] font-black">AUTO_FIX_READY</Badge>
-                                )}
-                              </div>
-                              <p className="text-[11px] font-bold uppercase tracking-wider leading-tight text-white/90">{issue.message}</p>
-                              <p className="text-[10px] font-mono opacity-50 uppercase tracking-tighter bg-black/20 p-2 rounded">{issue.suggestion}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                            {issue.autoFixable && (
+                              <Button 
+                                size="sm" 
+                                className="w-full h-8 text-[9px] font-black uppercase tracking-widest bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                                onClick={() => applyFix(issue.id)}
+                                disabled={!!fixingId}
+                              >
+                                {fixingId === issue.id ? 'Fixing...' : 'Execute_AutoFix'}
+                              </Button>
+                            )}
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
                   </TabsContent>
                 </Tabs>
