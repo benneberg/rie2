@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { Upload, ArrowRight, Loader2, Github, Fingerprint, Cpu, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -128,10 +127,8 @@ export function HomePage() {
       <OrbitalBackground />
       <Toaster richColors position="top-center" theme="dark" />
       <div className="max-w-7xl mx-auto px-6 py-20 lg:py-32 flex flex-col items-center text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-12 relative group"
+        <div
+          className="mb-12 relative group opacity-0 animate-reveal"
         >
           <div className="bg-primary text-primary-foreground px-6 py-2 font-display font-black text-4xl uppercase tracking-tighter shadow-brutal-dark group-hover:translate-x-1 group-hover:translate-y-1 group-hover:shadow-none transition-all">
             ArchLens
@@ -139,23 +136,17 @@ export function HomePage() {
           <div className="absolute -top-4 -right-8 bg-white/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-white/50 border border-white/5">
             PRO_4.2.1
           </div>
-        </motion.div>
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="text-5xl md:text-8xl font-display font-extrabold tracking-tighter mb-8 leading-[0.9] uppercase max-w-5xl"
+        </div>
+        <h1
+          className="text-5xl md:text-8xl font-display font-extrabold tracking-tighter mb-8 leading-[0.9] uppercase max-w-5xl opacity-0 animate-reveal [animation-delay:0.1s]"
         >
           Visual <span className="text-primary">Intelligence</span> for Dirty Code.
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="text-lg md:text-xl text-[#dde4f4]/60 max-w-2xl font-medium tracking-tight mb-16"
+        </h1>
+        <p
+          className="text-lg md:text-xl text-[#dde4f4]/60 max-w-2xl font-medium tracking-tight mb-16 opacity-0 animate-reveal [animation-delay:0.2s]"
         >
           X-ray your repository. Map dependencies in high-definition. Generate documentation that doesn't suck. All in seconds.
-        </motion.p>
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-4xl mb-24">
           <div
             ref={dropRef}
