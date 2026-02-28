@@ -20,28 +20,36 @@ export class ChatHandler {
     content: string;
     toolCalls?: ToolCall[];
   }> {
-    const messages = this.buildConversationMessages(message, conversationHistory);
-    const toolDefinitions = await getToolDefinitions();
-    if (onChunk) {
-      const stream = await this.client.chat.completions.create({
+    try {
+      const messages = this.buildConversationMessages(message, conversationHistory);
+      const toolDefinitions = await getToolDefinitions();
+      if (onChunk) {
+        const stream = await this.client.chat.completions.create({
+          model: this.model,
+          messages,
+          tools: toolDefinitions,
+          tool_choice: 'auto',
+          max_completion_tokens: 16000,
+          stream: true,
+        });
+        return this.handleStreamResponse(stream, message, conversationHistory, onChunk);
+      }
+      const completion = await this.client.chat.completions.create({
         model: this.model,
         messages,
         tools: toolDefinitions,
         tool_choice: 'auto',
-        max_completion_tokens: 16000,
-        stream: true,
+        max_tokens: 16000,
+        stream: false
       });
-      return this.handleStreamResponse(stream, message, conversationHistory, onChunk);
+      return this.handleNonStreamResponse(completion, message, conversationHistory);
+    } catch (error) {
+      console.error('ChatHandler.processMessage OpenAI error:', error?.message || error);
+      return { 
+        content: `AI inference failed. Verify CF_AI_BASE_URL (should be Cloudflare AI Gateway like https://gateway.ai.cloudflare.com/v1/...), CF_AI_API_KEY, and model '${this.model}' is valid/deployed (recommend 'gpt-4o-mini' or '@cf/meta/llama-3.1-8b-instruct'). Fallback: message processed without augmentation.`, 
+        toolCalls: undefined 
+      };
     }
-    const completion = await this.client.chat.completions.create({
-      model: this.model,
-      messages,
-      tools: toolDefinitions,
-      tool_choice: 'auto',
-      max_tokens: 16000,
-      stream: false
-    });
-    return this.handleNonStreamResponse(completion, message, conversationHistory);
   }
   private async handleStreamResponse(
     stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,

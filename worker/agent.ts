@@ -39,11 +39,13 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
   };
   async onStart(): Promise<void> {
+    const model = this.state.model || 'gpt-4o-mini';
     this.chatHandler = new ChatHandler(
       this.env.CF_AI_BASE_URL,
       this.env.CF_AI_API_KEY,
-      this.state.model
+      model
     );
+    console.log(`ChatHandler initialized: model='${model}', CF_AI_BASE_URL='${this.env.CF_AI_BASE_URL || 'MISSING'}', API_KEY present: ${!!this.env.CF_AI_API_KEY}`);
   }
   async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -89,10 +91,16 @@ export class ChatAgent extends Agent<Env, ChatState> {
       metadata.drift = RIEDriftEngine.compare(metadata, metadata.baseline);
     }
     if (this.chatHandler) {
-      const prompt = `Architectural summary for ${repoName}. Health Score: ${metadata.validation?.score}%. ${metadata.drift ? `Drift detected: ${metadata.drift.delta}% change.` : ''} Be technical and focus on bottlenecks.`;
-      const summaryRes = await this.chatHandler.processMessage(prompt, []);
-      if (!metadata.documentation) metadata.documentation = {};
-      metadata.documentation['summary'] = summaryRes.content;
+      try {
+        const prompt = `Architectural summary for ${repoName}. Health Score: ${metadata.validation?.score}%. ${metadata.drift ? `Drift detected: ${metadata.drift.delta}% change.` : ''} Be technical and focus on bottlenecks.`;
+        const summaryRes = await this.chatHandler.processMessage(prompt, []);
+        if (!metadata.documentation) metadata.documentation = {};
+        metadata.documentation['summary'] = summaryRes.content;
+      } catch (error: any) {
+        console.error('handleAnalyze AI summary failed:', error.message || error);
+        if (!metadata.documentation) metadata.documentation = {};
+        metadata.documentation['summary'] = `Fallback deterministic summary for ${repoName}: Health Score: ${metadata.validation?.score ?? 'N/A'}%${metadata.drift ? `, Drift from baseline: ${metadata.drift.delta}%` : ''}, Files: ${analysisFiles.length}. Critical issues: ${metadata.validation?.issues?.length ?? 0}.\n\nAI summary disabled: Invalid model or vars (expected 'gpt-4o-mini' with Cloudflare AI Gateway).`;
+      }
     }
     this.setState({ ...this.state, metadata });
     return Response.json({ success: true, metadata });
