@@ -23,7 +23,6 @@ export function DocumentationStudio() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState(0);
   const [cliInput, setCliInput] = useState('');
   const [showTerminal, setShowTerminal] = useState(true);
   const [logs, setLogs] = useState<{msg: string, type: 'info' | 'warn' | 'success' | 'cmd' | 'error'}[]>([]);
@@ -75,8 +74,7 @@ export function DocumentationStudio() {
     const cmd = cliInput.trim();
     addLog(cmd, 'cmd');
     setCliInput('');
-    const parts = cmd.toLowerCase().split(' ');
-    if (parts[0] === 'clear') {
+    if (cmd === 'clear') {
       setLogs([]);
       return;
     }
@@ -120,7 +118,7 @@ export function DocumentationStudio() {
       }, 800);
       return;
     }
-    addLog(`Unknown command. Usage: rie config --view, rie validate --strict, clear`, 'warn');
+    addLog(`Unknown command. Usage: rie config --view, rie validate --strict, rie fix --all, rie report --portable, clear`, 'warn');
   };
   const handleZipExport = async () => {
     addLog('rie: initializing zip archiver...', 'info');
@@ -186,11 +184,11 @@ jobs:
       - name: ArchLens Core Scan
         uses: archlens/action-rie-core@v1
         with:
-          session_id: $\{'{{'} inputs.session_id || '${sessionId || 'default'}' $\{'}}'}
+          session_id: \${{ inputs.session_id || '${sessionId || 'default'}' }}
           threshold: 80
           fail_on_drift: true
         env:
-          ARCHLENS_TOKEN: $\{'{{'} secrets.ARCHLENS_TOKEN $\{'}}'}
+          ARCHLENS_TOKEN: \${{ secrets.ARCHLENS_TOKEN }}
 `.trim();
     setDocs(prev => ({ ...prev, 'archlens.yml': actionTemplate }));
     setActiveDoc('archlens.yml');
@@ -211,10 +209,10 @@ jobs:
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleZipExport} className="btn-brutal-dark">
+            <Button variant="outline" onClick={handleZipExport} className="btn-brutal-dark h-11">
               <Package className="w-4 h-4 mr-2" /> Export All (.zip)
             </Button>
-            <Button onClick={saveManualEdits} className="btn-brutal-amber">
+            <Button onClick={saveManualEdits} className="btn-brutal-amber h-11">
               <Save className="w-4 h-4 mr-2" /> Commit State
             </Button>
           </div>
@@ -241,7 +239,7 @@ jobs:
                     </button>
                   ))}
                 </div>
-                <Button variant="outline" className="w-full text-[9px] font-bold uppercase border-dashed border-white/20" onClick={exportGitHubAction}>
+                <Button variant="outline" className="w-full text-[9px] font-bold uppercase border-dashed border-white/20 h-9" onClick={exportGitHubAction}>
                    + CI/CD Integration
                 </Button>
               </CardContent>
@@ -286,7 +284,7 @@ jobs:
                       <div className="p-8 rounded-full bg-primary/10 border border-primary/20">
                         <Sparkles className="w-12 h-12 text-primary" />
                       </div>
-                      <Button onClick={() => generateDoc(activeDoc)} disabled={isGenerating} className="btn-brutal-amber">Synthesize {activeDoc}</Button>
+                      <Button onClick={() => generateDoc(activeDoc)} disabled={isGenerating} className="btn-brutal-amber h-12">Synthesize {activeDoc}</Button>
                     </div>
                   )}
                 </div>
