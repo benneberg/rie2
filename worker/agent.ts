@@ -7,8 +7,9 @@ import { API_RESPONSES } from './config';
 import { createMessage, createStreamResponse, createEncoder } from './utils';
 import { RIEAnalyzer } from './rie-analyzer';
 import { RIEValidator } from './rie-validator';
-import { RepositorySource, LLMContext, RIEConfig } from '../src/lib/rie-types';
+import { RepositorySource, RIEConfig } from '../src/lib/rie-types';
 import { parseGitHubUrl } from '../src/lib/utils';
+import { RIEDriftEngine } from './rie-drift';
 export class ChatAgent extends Agent<Env, ChatState> {
   private chatHandler?: ChatHandler;
   initialState: ChatState = {
@@ -84,14 +85,11 @@ export class ChatAgent extends Agent<Env, ChatState> {
     metadata.source = source;
     metadata.status = 'completed';
     if (this.state.metadata?.baseline) {
-      const { RIEDriftEngine } = await import('./rie-drift');
       metadata.baseline = this.state.metadata.baseline;
       metadata.drift = RIEDriftEngine.compare(metadata, metadata.baseline);
     }
-    // AI summary generation with drift awareness
     if (this.chatHandler) {
-      const driftText = metadata.drift ? ` DRIFT WARNING: Health changed by ${metadata.drift.delta}%.` : '';
-      const prompt = `Architectural summary for ${repoName}. Health: ${metadata.validation?.score}%.${driftText} Focus on coupling and security.`;
+      const prompt = `Architectural summary for ${repoName}. Health Score: ${metadata.validation?.score}%. ${metadata.drift ? `Drift detected: ${metadata.drift.delta}% change.` : ''} Be technical and focus on bottlenecks.`;
       const summaryRes = await this.chatHandler.processMessage(prompt, []);
       if (!metadata.documentation) metadata.documentation = {};
       metadata.documentation['summary'] = summaryRes.content;
@@ -101,15 +99,14 @@ export class ChatAgent extends Agent<Env, ChatState> {
   }
   private async handleApplyFix(body: { issueId: string }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false }, { status: 400 });
-    // Simulate fixing: remove the issue and boost the score
     const updatedMetadata = JSON.parse(JSON.stringify(this.state.metadata));
     if (body.issueId === 'all') {
       updatedMetadata.validation.issues = updatedMetadata.validation.issues.filter((i: any) => !i.autoFixable);
     } else {
       updatedMetadata.validation.issues = updatedMetadata.validation.issues.filter((i: any) => i.id !== body.issueId);
     }
-    // Boost score slightly for simulated fix
-    updatedMetadata.validation.score = Math.min(100, updatedMetadata.validation.score + 5);
+    // Recalculate validation after simulation
+    updatedMetadata.validation = await RIEValidator.validate(updatedMetadata);
     this.setState({ ...this.state, metadata: updatedMetadata });
     return Response.json({ success: true });
   }
@@ -119,7 +116,11 @@ export class ChatAgent extends Agent<Env, ChatState> {
   }
   private async handleCreateBaseline(): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false }, { status: 400 });
-    const metadata = { ...this.state.metadata, baseline: JSON.parse(JSON.stringify(this.state.metadata)) };
+    const baseline = JSON.parse(JSON.stringify(this.state.metadata));
+    // Remove self-referencing drift or baseline fields from the snapshot
+    delete baseline.baseline;
+    delete baseline.drift;
+    const metadata = { ...this.state.metadata, baseline };
     this.setState({ ...this.state, metadata });
     return Response.json({ success: true });
   }
