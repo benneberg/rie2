@@ -30,6 +30,9 @@ export class ChatAgent extends Agent<Env, ChatState> {
       strictValidation: false,
       docVerbosity: 'standard',
       docMode: 'technical',
+      projectType: 'auto',
+      includeGlossary: true,
+      includeRoadmap: true,
       policy: {
         minSecurityScore: 70,
         minStructureScore: 60,
@@ -183,44 +186,48 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
   }
   private async handleGenerateDocs(body: { type: string }): Promise<Response> {
-    if (!this.state.metadata) {
-       return Response.json({ success: false, error: 'Metadata not available for synthesis.' }, { status: 400 });
-    }
-    const verbosity = this.state.config.docVerbosity || 'standard';
-    const mode = this.state.config.docMode || 'technical';
+    if (!this.state.metadata) return Response.json({ success: false, error: 'Metadata not available.' }, { status: 400 });
     const metadata = this.state.metadata;
-    const badge = metadata.validation?.summaryBadge || "N/A";
-    const issues = metadata.validation?.issues?.map(i => `- [${i.severity.toUpperCase()}] ${i.message}`).join('\n') || "No issues.";
-    let prompt = `Generate technical ${body.type} for the current repository. Output in clean Markdown.
-    Synthesis Persona: ${mode.toUpperCase()}
-    Verbosity Mode: ${verbosity.toUpperCase()}
-    ENFORCE THE FOLLOWING STRUCTURE:
-    1. **What is ${metadata.name || 'this project'}?**: A exactly 3-sentence plain English introduction.
-       ${mode === 'project' ? 'Focus on system philosophy and user value.' : 'Focus on technical stack and core logic.'}
-    2. **Validation Evidence**:
-       - Badge: ${badge}
-       - Summary of Findings:
-       ${issues}
-    3. **Quick Start**:
-       - Prerequisites
-       - Installation: Provide exact commands for ${metadata.primaryLanguage}.
-       - First Command example.
-    4. **System Architecture**:
-       ${mode === 'technical' 
-         ? 'Focus on structural specs, interop patterns, and implementation details.' 
-         : 'Focus on business value, logical flow, and high-level narratives.'}
-       - Detail Level: ${verbosity.toUpperCase()}.
-       ${verbosity === 'detailed' ? 'Assess technical debt and long-term scalability.' : ''}
-    STRICT GUIDELINES:
-    - DO NOT include internal logs or placeholders.
-    - Date format: Use ISO 8601 (YYYY-MM-DD).
-    - Language context: The primary language is ${metadata.primaryLanguage || 'Unknown'}.
-    Project Context:
-    - Total Files: ${metadata.totalFiles}
-    - Structure Preview: ${metadata.structure?.slice(0, 15).map(s => s.path).join(', ')}...
-    Generate now:`;
+    const config = this.state.config;
+    const projectType = metadata.projectType || config.projectType || 'general';
+    const verbosity = config.docVerbosity || 'standard';
+    const mode = config.docMode || 'technical';
+    const prompt = `Synthesize a professional ${body.type} for the repository "${metadata.name}".
+    ### LINGUISTIC PROTOCOL
+    - NO telegraphic slashes. Use full descriptive phrases (e.g., "installation and configuration" instead of "install/config").
+    - Use full sentence prose for all core sections.
+    - Maintain an authoritative, professional architectural tone.
+    ### DOMAIN CONTEXT: ${projectType.toUpperCase()}
+    ${projectType === 'firmware' ? `
+    - Hardware Prereqs: Specify MCU (e.g. ESP32/ESP8266) and minimum flash requirements.
+    - Supported Boards: Detail WROOM, DevKitC, etc.
+    - Use Cases: IoT scenarios, automation, or industrial monitoring.
+    ` : projectType === 'web' ? `
+    - UI Interoperability: Describe the frontend stack and state management approach.
+    - Client-Side Architecture: Detail the component rendering lifecycle.
+    ` : projectType === 'cli' ? `
+    - Command Reference: Detail binary execution and standard input/output.
+    - Argument Parsing: Describe flag handling and configuration files.
+    ` : ''}
+    ### CORE MODULES
+    1. **Overview**: Professional 3-sentence summary of the project domain and mission.
+    2. **Architecture Score Confidence**: 
+       - Current Score: ${metadata.validation?.score}%.
+       - EXPLAIN why this score was assigned based on ${metadata.totalFiles} files and primary language ${metadata.primaryLanguage}.
+    3. **Structural Topology**:
+       - Reference any Mermaid diagrams.
+       - ADD CAPTION: "*Pipeline: Deterministic → Validation → Intelligence*" below the diagram.
+    4. **Roadmap Status** (Mandatory Table):
+       - Columns: Version, Status (Planned/Current/In-Progress), Features.
+       - Include v1.0 (Current), v1.1 (In-Progress), v2.0 (Planned Future).
+    5. **Quick Start**:
+       - Prerequisites for ${metadata.primaryLanguage}.
+       - Deployment commands.
+    6. **Automated Glossary** (Include if true: ${config.includeGlossary}):
+       - Define 5-7 domain-specific terms (e.g. ${projectType === 'firmware' ? 'OTA, Flash, ISR' : 'Hydration, Virtual DOM, SSR'}).
+    STRICT MARKDOWN OUTPUT. Generate now:`;
     const res = await this.chatHandler!.processMessage(prompt, []);
-    const documentation = { ...(this.state.metadata.documentation || {}), [body.type]: res.content };
+    const documentation = { ...(metadata.documentation || {}), [body.type]: res.content };
     this.setState({ ...this.state, metadata: { ...this.state.metadata, documentation } });
     return Response.json({ success: true, content: res.content });
   }

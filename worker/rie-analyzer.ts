@@ -1,14 +1,17 @@
-import { RepositoryMetadata, FileEntry, LanguageDetection, DependencyEdge, RIEConfig } from '../src/lib/rie-types';
+import { RepositoryMetadata, FileEntry, LanguageDetection, DependencyEdge, RIEConfig, ProjectDomainType } from '../src/lib/rie-types';
 export class RIEAnalyzer {
   static async analyze(repoName: string, files: any[], config?: RIEConfig): Promise<RepositoryMetadata> {
     const excludeList = (config?.excludePatterns || []).map(p => p.toLowerCase());
     const filteredFiles = files.filter(f => !excludeList.some(pattern => f.name.toLowerCase().includes(pattern)));
     const totalFiles = filteredFiles.length;
     const totalSize = filteredFiles.reduce((acc, f) => acc + (f.size || 0), 0);
+    // Domain detection
+    const detectedProjectType = config?.projectType && config.projectType !== 'auto' 
+      ? config.projectType 
+      : this.detectProjectType(files);
     // Monorepo & Workspace mapping with robust manifest detection
     const workspaces: string[] = [];
     let isMonorepo = false;
-    // Find the root-most package.json
     const manifestFiles = files
       .filter(f => f.name === 'package.json' || f.name.endsWith('/package.json'))
       .sort((a, b) => a.name.split('/').length - b.name.split('/').length);
@@ -34,7 +37,6 @@ export class RIEAnalyzer {
       languageCounts[lang] = (languageCounts[lang] || 0) + 1;
       const pathParts = f.name.split('/');
       const fileName = pathParts.pop() || '';
-      // Architectural hub heuristic
       if (fileName === 'index.ts' || fileName === 'index.js') {
         const parentDir = pathParts.join('/');
         filteredFiles.slice(0, 10).forEach(other => {
@@ -70,6 +72,7 @@ export class RIEAnalyzer {
       isMonorepo,
       workspaces: [...new Set(workspaces)],
       analyzedAt: Date.now(),
+      projectType: detectedProjectType,
       config: config || {
         excludePatterns: [],
         analysisMode: 'standard',
@@ -80,9 +83,32 @@ export class RIEAnalyzer {
         maxDepth: 10,
         temperature: 0.7,
         outputDir: '.rie',
-        strictValidation: false
+        strictValidation: false,
+        projectType: 'auto',
+        includeGlossary: true,
+        includeRoadmap: true
       }
     };
+  }
+  private static detectProjectType(files: any[]): ProjectDomainType {
+    const fileNames = files.map(f => f.name.toLowerCase());
+    const fileContents = files.map(f => (f.content || '').toLowerCase());
+    // Firmware Detection
+    if (fileNames.some(f => f.includes('platformio.ini') || f.includes('cmakelists.txt') || f.includes('drivers/')) ||
+        fileContents.some(c => c.includes('void setup()') || c.includes('void loop()') || c.includes('#include <arduino.h>'))) {
+      return 'firmware';
+    }
+    // Web Detection
+    if (fileNames.some(f => f.includes('package.json') || f.includes('index.html') || f.includes('public/')) ||
+        fileContents.some(c => c.includes('react') || c.includes('vue') || c.includes('svelte') || c.includes('html'))) {
+      return 'web';
+    }
+    // CLI Detection
+    if (fileNames.some(f => f.includes('bin/') || f.includes('cli.ts') || f.includes('cli.js')) ||
+        fileContents.some(c => c.includes('commander') || c.includes('yargs') || c.includes('argparse'))) {
+      return 'cli';
+    }
+    return 'general';
   }
   private static detectLanguage(ext: string): string {
     const map: Record<string, string> = {

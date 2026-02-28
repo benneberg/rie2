@@ -7,12 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge'; import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Trash2, Save, Download, Cpu, Shield, Gavel, History, Layout } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Trash2, Save, Download, Cpu, Shield, Gavel, History, Globe, CpuIcon, TerminalSquare } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { toast, Toaster } from 'sonner';
 import { Textarea } from '@/components/ui/textarea';
-import { RIEConfig } from '@/lib/rie-types';
+import { RIEConfig, ProjectDomainType } from '@/lib/rie-types';
 export function SettingsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -30,6 +32,9 @@ export function SettingsPage() {
     strictValidation: false,
     docVerbosity: 'standard',
     docMode: 'technical',
+    projectType: 'auto',
+    includeGlossary: true,
+    includeRoadmap: true,
     policy: {
       minSecurityScore: 70,
       minStructureScore: 60,
@@ -104,10 +109,10 @@ export function SettingsPage() {
   return (
     <AppLayout container>
       <Toaster richColors position="top-center" theme="dark" />
-      <div className="space-y-12">
-        <header className="space-y-2 flex justify-between items-end">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 space-y-12">
+        <header className="space-y-2 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-primary/20 text-primary uppercase">Core_Config_V4.2</Badge>
+            <Badge variant="outline" className="text-[10px] font-bold tracking-widest border-primary/20 text-primary uppercase">Core_Config_V4.2.1</Badge>
             <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-none">System</h1>
           </div>
           <div className="flex gap-2">
@@ -123,77 +128,109 @@ export function SettingsPage() {
           </TabsList>
           <TabsContent value="visual">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <Card className="glass border-l-4 border-l-cyan-500 shadow-brutal-dark">
-                <CardHeader>
-                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-cyan-400 flex items-center gap-2">
-                    <Cpu className="w-4 h-4" /> AI_ENGINE_PARAMETERS
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Core_Model</Label>
-                    <Input
-                      value={config.aiModel}
-                      onChange={(e) => updateField({ aiModel: e.target.value })}
-                      className="bg-black/40 border-white/10 text-xs font-mono py-6"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
-                    <span className="text-[10px] font-black uppercase tracking-widest">Context_Injection</span>
-                    <Switch
-                      checked={config.llmAugmentation}
-                      onCheckedChange={(v) => updateField({ llmAugmentation: v })}
-                    />
-                  </div>
-                  <div className="space-y-4 pt-4 border-t border-white/5">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Documentation Synthesis Depth</Label>
-                    <RadioGroup
-                      value={config.docVerbosity || 'standard'}
-                      onValueChange={(v) => updateField({ docVerbosity: v as any })}
-                      className="grid grid-cols-1 gap-2"
-                    >
-                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                        <RadioGroupItem value="concise" id="v-concise" />
-                        <Label htmlFor="v-concise" className="text-xs">Concise (High-level only)</Label>
+              <div className="space-y-8">
+                <Card className="glass border-l-4 border-l-cyan-500 shadow-brutal-dark">
+                  <CardHeader>
+                    <CardTitle className="text-[10px] font-black uppercase tracking-widest text-cyan-400 flex items-center gap-2">
+                      <Cpu className="w-4 h-4" /> DOMAIN_CONTEXT_ENGINE
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-3">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Project Type Archetype</Label>
+                      <Select 
+                        value={config.projectType} 
+                        onValueChange={(v) => updateField({ projectType: v as ProjectDomainType })}
+                      >
+                        <SelectTrigger className="bg-black/40 border-white/10 h-12 font-mono text-xs uppercase tracking-widest">
+                          <SelectValue placeholder="Select Domain" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-midnight border-white/10 text-foreground">
+                          <SelectItem value="auto">Auto-Detect Domain</SelectItem>
+                          <SelectItem value="web">Web Application</SelectItem>
+                          <SelectItem value="firmware">Firmware / Embedded</SelectItem>
+                          <SelectItem value="cli">CLI / System Tool</SelectItem>
+                          <SelectItem value="general">General Software</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[9px] font-mono text-white/30 uppercase leading-relaxed">
+                        Influences README synthesis templates, supported boards detection, and UI interop narratives.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="glass border-l-4 border-l-purple-500 shadow-brutal-dark">
+                  <CardHeader>
+                    <CardTitle className="text-[10px] font-black uppercase tracking-widest text-purple-400 flex items-center gap-2">
+                      <History className="w-4 h-4" /> README_V4_FEATURES
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest block">Automated Glossary</span>
+                        <p className="text-[8px] font-mono opacity-40 uppercase">Define technical terms automatically</p>
                       </div>
-                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                        <RadioGroupItem value="standard" id="v-standard" />
-                        <Label htmlFor="v-standard" className="text-xs">Standard (Balanced prose)</Label>
+                      <Switch
+                        checked={config.includeGlossary}
+                        onCheckedChange={(v) => updateField({ includeGlossary: v })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-lg">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest block">Roadmap Tables</span>
+                        <p className="text-[8px] font-mono opacity-40 uppercase">Generate version-status matrices</p>
                       </div>
-                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                        <RadioGroupItem value="detailed" id="v-detailed" />
-                        <Label htmlFor="v-detailed" className="text-xs">Detailed (In-depth narratives)</Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-                  <div className="space-y-4 pt-4 border-t border-white/5">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Synthesis Persona</Label>
-                    <RadioGroup
-                      value={config.docMode || 'technical'}
-                      onValueChange={(v) => updateField({ docMode: v as any })}
-                      className="grid grid-cols-1 gap-2"
-                    >
-                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                        <RadioGroupItem value="technical" id="m-technical" />
-                        <Label htmlFor="m-technical" className="text-xs font-bold">Technical (Architectural focus)</Label>
-                      </div>
-                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
-                        <RadioGroupItem value="project" id="m-project" />
-                        <Label htmlFor="m-project" className="text-xs font-bold">Project (Stakeholder focus)</Label>
-                      </div>
-                    </RadioGroup>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="glass border-l-4 border-l-amber-500 shadow-brutal-dark">
-                <CardHeader>
-                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-2">
-                    <Shield className="w-4 h-4" /> SECURITY_FILTERS
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-4">
-                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Exclusion_Matrix</Label>
+                      <Switch
+                        checked={config.includeRoadmap}
+                        onCheckedChange={(v) => updateField({ includeRoadmap: v })}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="space-y-8">
+                <Card className="glass border-l-4 border-l-amber-500 shadow-brutal-dark">
+                  <CardHeader>
+                    <CardTitle className="text-[10px] font-black uppercase tracking-widest text-amber-500 flex items-center gap-2">
+                      <Shield className="w-4 h-4" /> AI_ENGINE_PARAMETERS
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Core_Model</Label>
+                      <Input
+                        value={config.aiModel}
+                        onChange={(e) => updateField({ aiModel: e.target.value })}
+                        className="bg-black/40 border-white/10 text-xs font-mono py-6"
+                      />
+                    </div>
+                    <div className="space-y-4 pt-4 border-t border-white/5">
+                      <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Synthesis Persona</Label>
+                      <RadioGroup
+                        value={config.docMode || 'technical'}
+                        onValueChange={(v) => updateField({ docMode: v as any })}
+                        className="grid grid-cols-1 gap-2"
+                      >
+                        <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10 cursor-pointer">
+                          <RadioGroupItem value="technical" id="m-technical" />
+                          <Label htmlFor="m-technical" className="text-xs font-bold cursor-pointer">Technical (Architectural focus)</Label>
+                        </div>
+                        <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10 cursor-pointer">
+                          <RadioGroupItem value="project" id="m-project" />
+                          <Label htmlFor="m-project" className="text-xs font-bold cursor-pointer">Project (Stakeholder focus)</Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="glass border-l-4 border-l-red-500 shadow-brutal-dark">
+                  <CardHeader>
+                    <CardTitle className="text-[10px] font-black uppercase tracking-widest text-red-500 flex items-center gap-2">
+                      <Trash2 className="w-4 h-4" /> EXCLUSION_MATRIX
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
                     <div className="flex flex-wrap gap-2">
                       {config.excludePatterns.map(p => (
                         <Badge key={p} className="bg-white/5 border border-white/10 text-[9px] font-mono py-1 px-3">
@@ -203,9 +240,9 @@ export function SettingsPage() {
                         </Badge>
                       ))}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </TabsContent>
           <TabsContent value="policy">
@@ -227,11 +264,11 @@ export function SettingsPage() {
                               <span>{item.label}</span>
                               <span className="text-primary">{(config.policy as any)?.[item.field] || 0}%</span>
                             </div>
-                            <Input
+                            <input
                               type="range" min="0" max="100"
                               value={(config.policy as any)?.[item.field] || 0}
                               onChange={(e) => updatePolicy({ [item.field]: parseInt(e.target.value) })}
-                              className="h-1 bg-white/10"
+                              className="w-full h-1 bg-white/10 appearance-none rounded-lg cursor-pointer accent-primary"
                             />
                          </div>
                        ))}

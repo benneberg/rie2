@@ -80,6 +80,7 @@ export interface PolicyConfig {
   maxRiskIndex: number;
   failOnCritical: boolean;
 }
+export type ProjectDomainType = 'web' | 'firmware' | 'cli' | 'general' | 'auto';
 export interface RIEConfig {
   excludePatterns: string[];
   analysisMode: 'standard' | 'deep';
@@ -94,6 +95,9 @@ export interface RIEConfig {
   policy?: PolicyConfig;
   docVerbosity?: 'concise' | 'standard' | 'detailed';
   docMode?: 'technical' | 'project';
+  projectType?: ProjectDomainType;
+  includeGlossary?: boolean;
+  includeRoadmap?: boolean;
 }
 export interface RepositorySource {
   type: 'upload' | 'github';
@@ -129,4 +133,5 @@ export interface RepositoryMetadata {
   status?: 'analyzing' | 'completed' | 'failed';
   baseline?: RepositoryMetadata;
   drift?: DriftReport;
+  projectType?: ProjectDomainType;
 }
