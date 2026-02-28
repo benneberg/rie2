@@ -11,8 +11,15 @@ export function LanguageDistributionChart({ languages }: { languages: LanguageDe
     name: l.language,
     value: l.fileCount
   }));
+  if (data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+        No data available
+      </div>
+    );
+  }
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" aspect={1}>
       <PieChart>
         <Pie
           data={data}
@@ -26,7 +33,7 @@ export function LanguageDistributionChart({ languages }: { languages: LanguageDe
             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip 
+        <Tooltip
           contentStyle={{ backgroundColor: '#0b0e18', border: '1px solid #181e30', fontSize: '10px', fontFamily: 'DM Mono' }}
           itemStyle={{ color: '#dde4f4' }}
         />
@@ -40,8 +47,15 @@ export function RiskRadarChart({ categories }: { categories: Record<string, numb
     A: value,
     fullMark: 100
   }));
+  if (data.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+        No data available
+      </div>
+    );
+  }
   return (
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height="100%" aspect={1}>
       <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data}>
         <PolarGrid stroke="#181e30" />
         <PolarAngleAxis dataKey="subject" tick={{ fill: '#dde4f4', fontSize: 8, fontFamily: 'DM Mono' }} />
@@ -67,21 +81,28 @@ export function FanInFanOutChart({ dependencies }: { dependencies: DependencyEdg
     t.in++;
     nodeStats.set(d.target, t);
   });
-  const data = Array.from(nodeStats.entries())
+  const chartData = Array.from(nodeStats.entries())
     .map(([name, stats]) => ({
       name: name.split('/').pop() || name,
       weight: stats.in + stats.out
     }))
     .sort((a, b) => b.weight - a.weight)
     .slice(0, 5);
+  if (chartData.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+        No data available
+      </div>
+    );
+  }
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} layout="vertical">
+    <ResponsiveContainer width="100%" height="100%" aspect={2}>
+      <BarChart data={chartData} layout="vertical">
         <XAxis type="number" hide />
-        <YAxis 
-          dataKey="name" 
-          type="category" 
-          width={80} 
+        <YAxis
+          dataKey="name"
+          type="category"
+          width={80}
           tick={{ fill: '#dde4f4', fontSize: 8, fontFamily: 'DM Mono' }}
           axisLine={false}
           tickLine={false}

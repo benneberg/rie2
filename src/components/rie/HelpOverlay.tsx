@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -53,7 +54,7 @@ export function HelpOverlay() {
             </div>
             <div>
               <SheetTitle className="text-xl font-display font-black uppercase tracking-tighter">RIE v4.2.1 Help</SheetTitle>
-              <p className="text-[9px] font-mono uppercase tracking-widest opacity-40">Architectural_Manual_Production_Staging</p>
+              <SheetDescription className="text-[9px] font-mono uppercase tracking-widest opacity-40">Architectural_Manual_Production_Staging</SheetDescription>
             </div>
           </div>
         </SheetHeader>

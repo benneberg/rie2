@@ -16,13 +16,13 @@ export class ChatAgent extends Agent<Env, ChatState> {
     messages: [],
     sessionId: crypto.randomUUID(),
     isProcessing: false,
-    model: 'gpt-4o-mini',
+    model: '@cf/meta/llama-3.1-8b-instruct-fp8/turbo',
     config: {
       excludePatterns: ['node_modules', '.git', 'dist', 'build', '.next'],
       analysisMode: 'standard',
       llmAugmentation: true,
       maxFileSize: 10 * 1024 * 1024,
-      aiModel: 'gpt-4o-mini',
+      aiModel: '@cf/meta/llama-3.1-8b-instruct-fp8/turbo',
       maxTokens: 4000,
       maxDepth: 10,
       temperature: 0.7,
@@ -39,7 +39,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
   };
   async onStart(): Promise<void> {
-    const model = this.state.model || 'gpt-4o-mini';
+    const model = this.state.model || '@cf/meta/llama-3.1-8b-instruct-fp8/turbo';
     this.chatHandler = new ChatHandler(
       this.env.CF_AI_BASE_URL,
       this.env.CF_AI_API_KEY,
