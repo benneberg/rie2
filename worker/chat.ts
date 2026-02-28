@@ -44,7 +44,8 @@ export class ChatHandler {
       });
       return this.handleNonStreamResponse(completion, message, conversationHistory);
     } catch (error) {
-      console.error('ChatHandler.processMessage OpenAI error:', error?.message || error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('ChatHandler.processMessage OpenAI error:', errMsg);
       return { 
         content: `AI inference failed. Verify CF_AI_BASE_URL (should be Cloudflare AI Gateway like https://gateway.ai.cloudflare.com/v1/...), CF_AI_API_KEY, and model '${this.model}' is valid/deployed (recommend 'gpt-4o-mini' or '@cf/meta/llama-3.1-8b-instruct'). Fallback: message processed without augmentation.`, 
         toolCalls: undefined 
@@ -90,7 +91,8 @@ export class ChatHandler {
         }
       }
     } catch (error) {
-      console.error('Stream processing error:', error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error('Stream processing error:', errMsg);
       throw new Error('Stream processing failed');
     }
     if (accumulatedToolCalls.length > 0) {
@@ -136,12 +138,13 @@ export class ChatHandler {
             result
           };
         } catch (error) {
-          console.error(`Tool execution failed for ${tc.function.name}:`, error);
+          const errMsg = error instanceof Error ? error.message : String(error);
+          console.error(`Tool execution failed for ${tc.function.name}:`, errMsg);
           return {
             id: tc.id,
             name: tc.function.name,
             arguments: {},
-            result: { error: `Failed to execute ${tc.function.name}: ${error instanceof Error ? error.message : 'Unknown error'}` }
+            result: { error: `Failed to execute ${tc.function.name}: ${errMsg}` }
           };
         }
       })

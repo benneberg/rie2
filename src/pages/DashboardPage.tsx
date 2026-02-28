@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Github, HardDrive, LayoutGrid, TrendingUp, TrendingDown, Anchor, Activity, Wrench, BarChart3, PieChart as PieChartIcon, History } from 'lucide-react';
 import { chatService } from '@/lib/chat';
@@ -119,7 +118,7 @@ export function DashboardPage() {
                 <PieChartIcon className="w-4 h-4 text-primary" />
                 <h3 className="text-[10px] font-black uppercase tracking-widest">DNA_Language_Mix</h3>
               </div>
-              <div className="h-[200px]">
+              <div className="h-[200px] min-h-[200px]">
                 <LanguageDistributionChart languages={metadata.languages} />
               </div>
             </CardContent>
@@ -130,7 +129,7 @@ export function DashboardPage() {
                 <BarChart3 className="w-4 h-4 text-cyan-400" />
                 <h3 className="text-[10px] font-black uppercase tracking-widest">Health_Radar</h3>
               </div>
-              <div className="h-[200px]">
+              <div className="h-[200px] min-h-[200px]">
                 <RiskRadarChart categories={report?.categories || {}} />
               </div>
             </CardContent>
@@ -141,7 +140,7 @@ export function DashboardPage() {
                 <Activity className="w-4 h-4 text-emerald-500" />
                 <h3 className="text-[10px] font-black uppercase tracking-widest">Top_Coupling_Nodes</h3>
               </div>
-              <div className="h-[200px]">
+              <div className="h-[200px] min-h-[200px]">
                 <FanInFanOutChart dependencies={metadata.dependencies || []} />
               </div>
             </CardContent>
