@@ -12,7 +12,6 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { chatService } from '@/lib/chat';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
 export function DocumentationStudio() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/rie/StatsCard';
 import { DependencyGraph } from '@/components/rie/DependencyGraph';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { motion } from 'framer-motion';
 import { Files, Code2, Database, AlertTriangle, Github, HardDrive, Box, ChevronRight, LayoutGrid, Zap, Info } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { cn } from '@/lib/utils';
@@ -75,7 +76,7 @@ export function DashboardPage() {
           </div>
         </header>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {report && Object.entries(report.categories).map(([cat, score]) => (
+          {report?.categories && Object.entries(report.categories).map(([cat, score]) => (
             <Card key={cat} className="glass overflow-hidden border-b-2 border-b-primary/20">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -84,17 +85,20 @@ export function DashboardPage() {
                 </div>
                 <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
                   <motion.div
+                    className={cn(
+                      "h-full origin-left",
+                      score > 85 ? 'bg-emerald-500' : score > 60 ? 'bg-amber-500' : 'bg-red-500'
+                    )}
                     initial={{ width: 0 }}
                     animate={{ width: `${score}%` }}
                     transition={{ duration: 1.5, ease: "easeOut" }}
-                    className={cn("h-full", score > 85 ? 'bg-emerald-500' : score > 60 ? 'bg-amber-500' : 'bg-red-500')}
                   />
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
-        {report?.recommendations && report.recommendations.length > 0 && (
+        {report?.recommendations?.length > 0 && (
           <div className="p-6 bg-primary/5 border border-primary/20 rounded-xl space-y-4">
             <div className="flex items-center gap-2">
               <Zap className="w-4 h-4 text-primary" />
@@ -153,12 +157,12 @@ export function DashboardPage() {
                 <span className="font-display font-bold uppercase tracking-widest text-xs">Structural Topology</span>
                 <Badge variant="secondary" className="text-[9px] font-mono uppercase">Mermaid_Engine_Render</Badge>
               </div>
-              <DependencyGraph dependencies={metadata.dependencies} />
+              <DependencyGraph dependencies={metadata.dependencies || []} />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <StatsCard label="Files_Count" value={metadata.totalFiles.toString()} icon={<Files className="w-4 h-4" />} />
-              <StatsCard label="Language_Core" value={metadata.primaryLanguage} icon={<Code2 className="w-4 h-4" />} />
-              <StatsCard label="Total_Payload" value={`${(metadata.totalSize / 1024).toFixed(1)} KB`} icon={<Database className="w-4 h-4" />} />
+              <StatsCard label="Files_Count" value={metadata.totalFiles?.toString() || '0'} icon={<Files className="w-4 h-4" />} />
+              <StatsCard label="Language_Core" value={metadata.primaryLanguage || 'Unknown'} icon={<Code2 className="w-4 h-4" />} />
+              <StatsCard label="Total_Payload" value={`${((metadata.totalSize || 0) / 1024).toFixed(1)} KB`} icon={<Database className="w-4 h-4" />} />
             </div>
           </div>
           <div className="lg:col-span-4">
@@ -175,7 +179,53 @@ export function DashboardPage() {
                   </div>
                   <TabsContent value="all" className="p-0">
                     <div className="divide-y divide-white/5">
-                      {report?.issues.map((issue, idx) => (
+                      {report?.issues?.map((issue, idx) => (
+                        <div key={idx} className="p-6 hover:bg-white/5 transition-colors group">
+                          <div className="flex items-start gap-4">
+                            <AlertTriangle className={cn("w-5 h-5 mt-0.5", issue.severity === 'critical' || issue.severity === 'high' ? "text-red-500" : "text-amber-500")} />
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0 border-white/20 opacity-60">
+                                  {issue.category}
+                                </Badge>
+                                {issue.autoFixable && (
+                                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[8px] font-black">AUTO_FIX_READY</Badge>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-bold uppercase tracking-wider leading-tight text-white/90">{issue.message}</p>
+                              <p className="text-[10px] font-mono opacity-50 uppercase tracking-tighter bg-black/20 p-2 rounded">{issue.suggestion}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="high" className="p-0">
+                    <div className="divide-y divide-white/5">
+                      {report?.issues?.filter(issue => issue.severity === 'high' || issue.severity === 'critical').map((issue, idx) => (
+                        <div key={idx} className="p-6 hover:bg-white/5 transition-colors group">
+                          <div className="flex items-start gap-4">
+                            <AlertTriangle className={cn("w-5 h-5 mt-0.5", issue.severity === 'critical' || issue.severity === 'high' ? "text-red-500" : "text-amber-500")} />
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0 border-white/20 opacity-60">
+                                  {issue.category}
+                                </Badge>
+                                {issue.autoFixable && (
+                                  <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[8px] font-black">AUTO_FIX_READY</Badge>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-bold uppercase tracking-wider leading-tight text-white/90">{issue.message}</p>
+                              <p className="text-[10px] font-mono opacity-50 uppercase tracking-tighter bg-black/20 p-2 rounded">{issue.suggestion}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="security" className="p-0">
+                    <div className="divide-y divide-white/5">
+                      {report?.issues?.filter(issue => issue.category?.toLowerCase().includes('security')).map((issue, idx) => (
                         <div key={idx} className="p-6 hover:bg-white/5 transition-colors group">
                           <div className="flex items-start gap-4">
                             <AlertTriangle className={cn("w-5 h-5 mt-0.5", issue.severity === 'critical' || issue.severity === 'high' ? "text-red-500" : "text-amber-500")} />
