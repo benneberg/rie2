@@ -58,6 +58,7 @@ export interface ValidationReport {
   heatmap: HeatmapNode[];
   recommendations: string[];
   riskMetrics?: RiskMetrics;
+  summaryBadge?: string;
   updatedAt: number;
 }
 export interface DriftReport {
@@ -91,6 +92,7 @@ export interface RIEConfig {
   outputDir: string;
   strictValidation: boolean;
   policy?: PolicyConfig;
+  docVerbosity?: 'concise' | 'standard' | 'detailed';
 }
 export interface RepositorySource {
   type: 'upload' | 'github';

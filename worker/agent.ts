@@ -168,7 +168,40 @@ export class ChatAgent extends Agent<Env, ChatState> {
     }
   }
   private async handleGenerateDocs(body: { type: string }): Promise<Response> {
-    const prompt = `Generate technical ${body.type} for the current repository.`;
+    const verbosity = this.state.config.docVerbosity || 'standard';
+    const metadata = this.state.metadata;
+    const badge = metadata?.validation?.summaryBadge || "N/A";
+    const issues = metadata?.validation?.issues?.map(i => `- [${i.severity.toUpperCase()}] ${i.message}`).join('\n') || "No issues.";
+
+    let prompt = `Generate technical ${body.type} for the current repository. Output in clean Markdown.
+    ENFORCE THE FOLLOWING STRUCTURE:
+    1. **What is ${metadata?.name || 'this project'}?**: A exactly 3-sentence plain English introduction. 
+       Avoid jargon in the first sentence.
+    2. **Validation Evidence**: 
+       - Badge: ${badge}
+       - Summary of Findings:
+       ${issues}
+    3. **Quick Start**:
+       - Prerequisites
+       - Installation: Include \`npx rie scan\` mockup if applicable.
+       - First Command example.
+    4. **System Architecture**: Use the following verbosity mode: ${verbosity.toUpperCase()}.
+       - If CONCISE: Use short bullet points and Mermaid diagrams only.
+       - If STANDARD: Mix technical diagrams with explanatory paragraphs.
+       - If DETAILED: Provide deep architectural narratives, interop patterns, and technical debt assessment.
+    
+    STRICT GUIDELINES:
+    - DO NOT include internal logs or "Studio synthesis" markers.
+    - Date format: Use ISO 8601 (YYYY-MM-DD).
+    - Language context: The primary language is ${metadata?.primaryLanguage || 'Unknown'}.
+    
+    Project Context:
+    - Total Files: ${metadata?.totalFiles}
+    - Structure: ${metadata?.structure?.slice(0, 20).map(s => s.path).join(', ')}...
+    - Documentation Summary: ${metadata?.documentation?.['summary'] || 'N/A'}
+    
+    Generate now:`;
+
     const res = await this.chatHandler!.processMessage(prompt, []);
     const documentation = { ...(this.state.metadata?.documentation || {}), [body.type]: res.content };
     this.setState({ ...this.state, metadata: { ...this.state.metadata!, documentation } });

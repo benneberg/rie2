@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/badge'; import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Trash2, Save, Download, Cpu, Shield, Gavel, History } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { toast, Toaster } from 'sonner';
@@ -144,6 +144,27 @@ export function SettingsPage() {
                       checked={config.llmAugmentation}
                       onCheckedChange={(v) => updateField({ llmAugmentation: v })}
                     />
+                  </div>
+                  <div className="space-y-4 pt-4 border-t border-white/5">
+                    <Label className="text-[10px] font-bold uppercase tracking-widest opacity-50">Documentation Synthesis Depth</Label>
+                    <RadioGroup 
+                      value={config.docVerbosity || 'standard'} 
+                      onValueChange={(v) => updateField({ docVerbosity: v as any })}
+                      className="grid grid-cols-1 gap-2"
+                    >
+                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                        <RadioGroupItem value="concise" id="v-concise" />
+                        <Label htmlFor="v-concise" className="text-xs">Concise (Bullet points, high-level only)</Label>
+                      </div>
+                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                        <RadioGroupItem value="standard" id="v-standard" />
+                        <Label htmlFor="v-standard" className="text-xs">Standard (Balanced prose and diagrams)</Label>
+                      </div>
+                      <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                        <RadioGroupItem value="detailed" id="v-detailed" />
+                        <Label htmlFor="v-detailed" className="text-xs">Detailed (In-depth architectural narratives)</Label>
+                      </div>
+                    </RadioGroup>
                   </div>
                 </CardContent>
               </Card>

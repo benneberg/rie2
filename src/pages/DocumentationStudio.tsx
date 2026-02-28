@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { FileText, ChevronLeft, Terminal as TerminalIcon, Eye, Zap, Code, ShieldCheck, DownloadCloud, Sparkles } from 'lucide-react';
+import { FileText, ChevronLeft, Terminal as TerminalIcon, Eye, Zap, Code, ShieldCheck, DownloadCloud, Sparkles, CheckCircle2, Circle, LayoutPanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +23,7 @@ export function DocumentationStudio() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [cliInput, setCliInput] = useState('');
+  const [showTerminal, setShowTerminal] = useState(true);
   const [logs, setLogs] = useState<{msg: string, type: 'info' | 'warn' | 'success' | 'cmd' | 'error'}[]>([]);
   const terminalRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -40,6 +41,21 @@ export function DocumentationStudio() {
   }, [logs]);
   const addLog = (msg: string, type: 'info' | 'warn' | 'success' | 'cmd' | 'error' = 'info') => {
     setLogs(prev => [...prev, { msg: `[${new Date().toLocaleTimeString()}] ${msg}`, type }]);
+  };
+
+  const getSynthesisInventory = () => {
+    const content = docs[activeDoc] || '';
+    const sections = [
+      { name: 'Overview', regex: /(#|##) (Overview|What is|Intro)/i },
+      { name: 'Architecture', regex: /(#|##) (Architecture|Structure|Design)/i },
+      { name: 'Quick Start', regex: /(#|##) (Quick Start|Installation|Setup)/i },
+      { name: 'Security', regex: /(#|##) (Security|Audit)/i },
+      { name: 'Contributing', regex: /(#|##) (Contributing|Development)/i },
+    ];
+    return sections.map(s => ({
+      ...s,
+      populated: s.regex.test(content)
+    }));
   };
   const fetchDocs = async () => {
     try {
@@ -201,8 +217,8 @@ jobs:
             </Button>
           </div>
         </header>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
-          <div className="lg:col-span-1 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1">
+          <div className="lg:col-span-3 space-y-4">
             <Card className="glass border-border">
               <CardContent className="p-4 space-y-4">
                 <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-white/5 pb-2">Technical Artifacts</h3>
@@ -228,14 +244,40 @@ jobs:
                 </Button>
               </CardContent>
             </Card>
+
+            <Card className="glass border-border">
+              <CardContent className="p-4 space-y-4">
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-white/5 pb-2 flex items-center justify-between">
+                  <span>Synthesis Inventory</span>
+                  <LayoutPanelLeft className="w-3 h-3" />
+                </h3>
+                <div className="space-y-3">
+                  {getSynthesisInventory().map(section => (
+                    <div key={section.name} className="flex items-center justify-between text-[10px] font-mono uppercase tracking-tighter">
+                      <span className={cn(section.populated ? "text-foreground" : "text-white/20")}>{section.name}</span>
+                      {section.populated ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : (
+                        <Circle className="w-3.5 h-3.5 text-white/5" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </div>
-          <div className="lg:col-span-3 flex flex-col gap-6">
+          <div className="lg:col-span-9 flex flex-col gap-6">
             <Card className="flex-1 min-h-[500px] flex flex-col glass border-border overflow-hidden shadow-brutal-dark">
               <div className="flex items-center justify-between px-6 py-3 border-b bg-white/5">
                 <span className="font-mono text-[10px] font-bold text-muted-foreground tracking-widest uppercase">{activeDoc}</span>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="h-6 text-[8px] font-bold uppercase px-2" onClick={() => setShowTerminal(!showTerminal)}>
+                    {showTerminal ? 'Hide_Terminal' : 'Show_Terminal'}
+                  </Button>
+                </div>
               </div>
               <ScrollArea className="flex-1">
-                <div className="p-10">
+                <div className={cn("p-10 transition-opacity", isGenerating && "opacity-50")}>
                   {docs[activeDoc] ? (
                     <article className="prose prose-slate dark:prose-invert max-w-none">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{docs[activeDoc]}</ReactMarkdown>
@@ -251,6 +293,7 @@ jobs:
                 </div>
               </ScrollArea>
             </Card>
+            {showTerminal && (
             <div className="bg-zinc-950 rounded-xl border border-white/10 overflow-hidden flex flex-col shadow-brutal-dark h-60">
               <div className="bg-zinc-900 px-4 py-2 border-b border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-[9px] font-mono font-bold text-zinc-500 tracking-[0.2em] uppercase">
@@ -280,6 +323,7 @@ jobs:
                 </form>
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>
