@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -29,24 +28,12 @@ The dashboard provides a deterministic X-ray of your software architecture:
 Interact with the RIE core via the terminal simulator or generate documentation:
 - \`rie validate --strict\`: Audit code against defined governance policies.
 - \`rie diff\`: Calculate delta metrics between current and baseline snapshots.
-## 4. Automated Fixing & Remediation
-ArchLens doesn't just identify problems; it fixes them.
-- **Execute_AutoFix**: For issues like 'High Coupling' or 'Security Leaks', clicking fix will automatically inject remediation strategies into your ARCHITECTURE.md or SECURITY.md files.
-- **Stateful Persistence**: These fixes are saved into the repository metadata and reflected in the standalone reports.
-## 5. Enterprise Reporting
-ArchLens supports "Portable Snapshots" for stakeholder review:
-- **Export Report**: Generates a self-contained HTML file with embedded Mermaid.js diagrams and all synthesized artifacts.
-- **CLI Interface**: Use \`rie report --portable\` in the Studio terminal to generate snapshots.
-## 6. Governance & Policy (Settings)
+- **Synthesis**: AI-augmented README, ARCHITECTURE, and SECURITY markdown generation using the *ArchLens AI Core*.
+## 4. Governance & Policy (Settings)
 Configure the engine thresholds to suit your project standards:
 - **Security Threshold**: Fail analysis if sensitive files or leaks are detected.
 - **Exclusion Matrix**: Define regex patterns for directories to ignore during mapping.
 - **Thresholds**: Set minimum acceptable scores for architectural health.
-## 7. CLI Command Reference
-- \`rie config --view\`: View current engine parameters.
-- \`rie validate --strict\`: Force a deep recursive health audit.
-- \`rie fix --all\`: Execute all pending auto-fixes sequentially.
-- \`rie report --portable\`: Download the standalone HTML architectural blueprint.
 ---
 *Note: ArchLens uses Cloudflare Workers for processing. Maximum archive size for v4.2 is 10MB.*
 `;
@@ -66,13 +53,13 @@ export function HelpOverlay() {
             </div>
             <div>
               <SheetTitle className="text-xl font-display font-black uppercase tracking-tighter">RIE v4.2.1 Help</SheetTitle>
-              <SheetDescription className="text-[9px] font-mono uppercase tracking-widest opacity-40">Architectural_Manual_Production_Staging</SheetDescription>
+              <p className="text-[9px] font-mono uppercase tracking-widest opacity-40">Architectural_Manual_Production_Staging</p>
             </div>
           </div>
         </SheetHeader>
         <ScrollArea className="flex-1">
           <div className="p-8">
-            <article className="prose prose-invert prose-slate max-w-none
+            <article className="prose prose-invert prose-slate max-w-none 
               prose-h1:text-2xl prose-h1:font-display prose-h1:font-black prose-h1:uppercase prose-h1:tracking-tighter prose-h1:border-b prose-h1:border-white/10 prose-h1:pb-4
               prose-h2:text-sm prose-h2:font-display prose-h2:font-black prose-h2:uppercase prose-h2:tracking-widest prose-h2:text-primary prose-h2:mt-12
               prose-p:text-xs prose-p:font-mono prose-p:leading-relaxed prose-p:text-white/60

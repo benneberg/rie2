@@ -5,6 +5,7 @@ import { OrbitalBackground } from "@/components/OrbitalBackground";
 import { ChatWidget } from "@/components/rie/ChatWidget";
 import { Button } from "@/components/ui/button";
 import { AppSidebarContent } from "@/components/app-sidebar";
+import { HelpOverlay } from "@/components/rie/HelpOverlay";
 import { X, Github, Terminal, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 type AppLayoutProps = {
@@ -66,6 +67,7 @@ export function AppLayout({ children, container = false, className, contentClass
           <a href="https://github.com" target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] hover:text-primary transition-colors">
             <Github className="w-3.5 h-3.5" /> Source
           </a>
+          <HelpOverlay />
         </div>
         <button
           onClick={() => setIsMenuOpen(true)}
