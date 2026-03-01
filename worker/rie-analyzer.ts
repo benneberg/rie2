@@ -12,9 +12,9 @@ export class RIEAnalyzer {
     const roadmap = this.extractRoadmap(files, config?.targetRoadmap);
     const workspaces: string[] = [];
     let isMonorepo = false;
-    const packageFiles = files.filter(f => f.name === 'package.json' || f.name.endsWith('/package.json'));
+    const packageFiles = files.filter(f => f.name.endsWith('package.json'));
     if (packageFiles.length > 0) {
-      const rootPkg = packageFiles.sort((a,b) => a.name.length - b.name.length)[0];
+      const rootPkg = packageFiles.sort((a, b) => a.name.length - b.name.length)[0];
       if (rootPkg && rootPkg.content) {
         try {
           const pkg = JSON.parse(rootPkg.content);
@@ -51,10 +51,10 @@ export class RIEAnalyzer {
       };
     });
     const languages: LanguageDetection[] = Object.entries(languageCounts)
-      .map(([language, count]) => ({ 
-        language, 
-        fileCount: count, 
-        percentage: Math.round((count / totalFiles) * 100) 
+      .map(([language, count]) => ({
+        language,
+        fileCount: count,
+        percentage: Math.round((count / (totalFiles || 1)) * 100)
       }))
       .sort((a, b) => b.fileCount - a.fileCount);
     return {
@@ -65,7 +65,7 @@ export class RIEAnalyzer {
       primaryLanguage: languages[0]?.language || 'Unknown',
       languages,
       structure,
-      dependencies: dependencies.slice(0, 500), // Cap for performance
+      dependencies: dependencies.slice(0, 1000),
       isMonorepo,
       workspaces,
       analyzedAt: Date.now(),
@@ -95,6 +95,15 @@ export class RIEAnalyzer {
     } else if (lang === 'Python') {
       symbols.classes = (content.match(/^class\s+\w+/gm) || []).length;
       symbols.functions = (content.match(/^def\s+\w+/gm) || []).length;
+      symbols.exports = (content.match(/^__all__\s*=/gm) || []).length ? 1 : 0;
+    } else if (lang === 'Go') {
+      symbols.classes = (content.match(/\btype\s+\w+\s+struct\b/g) || []).length;
+      symbols.functions = (content.match(/\bfunc\s+(\(.*\)\s+)?\w+\(/g) || []).length;
+      symbols.exports = (content.match(/\bfunc\s+[A-Z]\w+\(/g) || []).length;
+    } else if (lang === 'Rust') {
+      symbols.classes = (content.match(/\bstruct\s+\w+/g) || []).length;
+      symbols.functions = (content.match(/\bfn\s+\w+/g) || []).length;
+      symbols.exports = (content.match(/\bpub\s+(fn|struct|enum|const|type|trait)\b/g) || []).length;
     }
     return symbols;
   }
@@ -113,11 +122,31 @@ export class RIEAnalyzer {
         const target = this.resolvePath(filePath, match[1], internalPaths);
         if (target) deps.push({ source: filePath, target, type: 'require' });
       }
+    } else if (lang === 'Python') {
+      const pyImportRegex = /^(?:from\s+([\w.]+)\s+import|import\s+([\w.,\s]+))/gm;
+      let match;
+      while ((match = pyImportRegex.exec(content)) !== null) {
+        const mod = (match[1] || match[2] || '').split(',')[0].trim();
+        const target = this.resolvePythonPath(filePath, mod, internalPaths);
+        if (target) deps.push({ source: filePath, target, type: 'import' });
+      }
+    } else if (lang === 'Go') {
+      const goImportRegex = /import\s+\(\s*([\s\S]*?)\s*\)|import\s+"([^"]+)"/g;
+      let match;
+      while ((match = goImportRegex.exec(content)) !== null) {
+        const imports = match[1] ? match[1].split('\n') : [match[2]];
+        imports.forEach(i => {
+          const path = i.trim().replace(/"/g, '');
+          if (path && !path.includes('.')) return; // stdlib
+          const target = Array.from(internalPaths).find(p => p.includes(path));
+          if (target) deps.push({ source: filePath, target: target, type: 'import' });
+        });
+      }
     }
     return deps;
   }
   private static resolvePath(currentPath: string, targetPath: string, internalPaths: Set<string>): string | null {
-    if (!targetPath.startsWith('.')) return null; // Ignore external packages
+    if (!targetPath.startsWith('.')) return null;
     const parts = currentPath.split('/');
     parts.pop();
     const targetParts = targetPath.split('/');
@@ -133,23 +162,28 @@ export class RIEAnalyzer {
     }
     return null;
   }
+  private static resolvePythonPath(currentPath: string, targetPath: string, internalPaths: Set<string>): string | null {
+    const parts = currentPath.split('/');
+    parts.pop();
+    const modParts = targetPath.split('.');
+    const resolved = [...parts, ...modParts].join('/');
+    if (internalPaths.has(resolved + '.py')) return resolved + '.py';
+    if (internalPaths.has(resolved + '/__init__.py')) return resolved + '/__init__.py';
+    return null;
+  }
   private static extractPhilosophy(files: any[], custom?: Partial<ProjectPhilosophy>): ProjectPhilosophy {
     const readme = files.find(f => f.name.toLowerCase() === 'readme.md')?.content || '';
     const purpose = custom?.purpose || (readme.split('\n')[0]?.replace(/^#+\s*/, '') || 'Deterministic Architectural Repository');
     return {
       purpose,
       positioning: custom?.positioning || 'Technical infrastructure component.',
-      constraints: custom?.constraints || ['Cloudflare Workers Environment', 'Strict Type Safety', 'Low Latency Analysis'],
+      constraints: custom?.constraints || ['Cloudflare Workers Environment', 'Polyglot Support'],
       evolution: custom?.evolution || 'Continuous structural refinement.',
       interoperability: custom?.interoperability || 'RESTful JSON API'
     };
   }
   private static extractRoadmap(files: any[], custom?: RoadmapItem[]): RoadmapItem[] {
     if (custom && custom.length > 0) return custom;
-    const roadmapFile = files.find(f => f.name.toLowerCase().includes('roadmap') || f.name.toLowerCase().includes('todo'));
-    if (roadmapFile && roadmapFile.content) {
-      return [{ version: 'v1.1', status: 'queued', features: ['Deep AST Parsing', 'Enhanced Visualizations'] }];
-    }
     return [{ version: 'v1.0', status: 'current', features: ['Core Analysis Engine', 'Visualization Suite'] }];
   }
   private static detectProjectType(files: any[], customVocabulary?: Record<string, string>): ProjectDomainType {
@@ -159,9 +193,8 @@ export class RIEAnalyzer {
         if (names.some(n => n.includes(term.toLowerCase()))) return domain as ProjectDomainType;
       }
     }
-    if (names.some(n => n.includes('platformio') || n.includes('arduino') || n.includes('firmware'))) return 'firmware';
-    if (names.some(n => n.includes('package.json') || n.includes('index.html'))) return 'web';
-    if (names.some(n => n.includes('cli.ts') || n.includes('bin/'))) return 'cli';
+    if (names.some(n => n.includes('package.json'))) return 'web';
+    if (names.some(n => n.includes('setup.py') || n.includes('requirements.txt'))) return 'general';
     return 'general';
   }
   private static detectLanguage(ext: string): string {

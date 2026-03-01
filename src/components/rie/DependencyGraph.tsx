@@ -34,14 +34,13 @@ export function DependencyGraph({ dependencies }: DependencyGraphProps) {
     });
   }, []);
   useEffect(() => {
-    const renderGraph = async () => {
-      if (!containerRef.current || dependencies.length === 0) return;
-      
+    const renderGraph = async () => {      if (!containerRef.current || dependencies.length === 0) return;
       setIsRendering(true);
-      containerRef.current.innerHTML = '';
-
       try {
-        const sanitizeId = (path: string) => `node_${path.replace(/[^a-zA-Z0-9]/g, '_')}_${graphId}`;
+        // Robust ID sanitization to prevent Mermaid syntax errors
+        const sanitizeId = (path: string) => {
+          return `node_${path.replace(/[^a-zA-Z0-9]/g, '_').replace(/^_+|_+$/g, '')}_${graphId}`;
+        };
         let displayDeps = dependencies;
         if (graphType === 'package') {
           // Heuristic: aggregate by parent directory
@@ -60,11 +59,15 @@ export function DependencyGraph({ dependencies }: DependencyGraphProps) {
           const sourceId = sanitizeId(edge.source);
           const targetId = sanitizeId(edge.target);
           return `  ${sourceId}["${edge.source}"] --> ${targetId}["${edge.target}"]`;
-        }).join('\n');
-        const graphDefinition = `graph TD\n${edges}`;
-        const { svg } = await mermaid.render(`render_${graphId}`, graphDefinition);
+        }).filter(Boolean).join('\n');
+
+        if (!edges) throw new Error('NO_EDGES_GENERATED');
+
+        const graphDefinition = `graph LR\n${edges}`;
         
-        if (containerRef.current) containerRef.current.innerHTML = svg;
+        // Clear exactly before render to prevent flickering or duplication
+        if (containerRef.current) containerRef.current.innerHTML = '';
+        const { svg } = await mermaid.render(`render_${graphId}`, graphDefinition);
         setSvgContent(svg);
       } catch (err) {
         console.error('Mermaid error:', err);

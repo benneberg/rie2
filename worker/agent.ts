@@ -103,7 +103,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
     const config = this.state.config;
     const philosophy = metadata.philosophy || config.customPhilosophy;
     const roadmap = metadata.roadmap || config.targetRoadmap || [];
-    const prompt = `Synthesize a professional ${body.type} v2.0 for the repository "${metadata.name}".
+    const prompt = `Synthesize a professional ${body.type} v2.0 for the repository "${metadata.name}" in ${config.docMode || 'technical'} mode.
     ### LINGUISTIC PROTOCOL
     - Maintain an authoritative, professional architectural tone.
     - NO halluncinated features. Use only the provided structural evidence.
@@ -122,7 +122,7 @@ export class ChatAgent extends Agent<Env, ChatState> {
        - Generate a markdown table with columns: Version, Status (Current/Queued/Planned), Features.
     5. **Automated Glossary**: Define 5 domain terms found in the codebase.
     STRICT MARKDOWN OUTPUT. Generate now:`;
-    const res = await this.chatHandler!.processMessage(prompt, []);
+    const res = await this.chatHandler!.processMessage(prompt, [], undefined, metadata);
     const documentation = { ...(metadata.documentation || {}), [body.type]: res.content };
     this.setState({ ...this.state, metadata: { ...this.state.metadata, documentation } });
     return Response.json({ success: true, content: res.content });
@@ -167,7 +167,11 @@ export class ChatAgent extends Agent<Env, ChatState> {
   private async handleApplyFix(body: { issueId: string }): Promise<Response> {
     if (!this.state.metadata) return Response.json({ success: false }, { status: 400 });
     const updatedMetadata = JSON.parse(JSON.stringify(this.state.metadata));
-    updatedMetadata.validation.issues = updatedMetadata.validation.issues.filter((i: any) => i.id !== body.issueId);
+    const originalIssues = updatedMetadata.validation.issues;
+    updatedMetadata.validation.issues = originalIssues.filter((i: any) => i.id !== body.issueId);
+    
+    if (updatedMetadata.validation.issues.length === originalIssues.length) return Response.json({ success: false, error: 'Issue not found' }, { status: 404 });
+    
     updatedMetadata.validation = await RIEValidator.validate(updatedMetadata);
     this.setState({ ...this.state, metadata: updatedMetadata });
     return Response.json({ success: true });

@@ -84,10 +84,19 @@ export function DocumentationStudio() {
       try {
         const res = await fetch(`/api/sessions/${targetId}/metadata`);
         const targetData = await res.json();
-        if (targetData.success && targetData.metadata) {
-          addLog(`rie: delta score: ${metadata.validation.score - targetData.metadata.validation.score}%`, 'info');
-        } else throw new Error();
-      } catch { addLog('rie: session not found.', 'error'); }
+        // Fix: endpoint returns { success: true, data: ChatState }
+        if (targetData.success && targetData.data?.metadata) {
+          const targetMetadata = targetData.data.metadata;
+          const delta = (metadata.validation?.score || 0) - (targetMetadata.validation?.score || 0);
+          addLog(`rie: compare target [${targetMetadata.name}]`, 'success');
+          addLog(`rie: delta health score: ${delta > 0 ? '+' : ''}${delta}%`, 'info');
+          addLog(`rie: target stack: ${targetMetadata.primaryLanguage} (${targetMetadata.totalFiles} files)`, 'info');
+        } else {
+          throw new Error('No metadata in target session');
+        }
+      } catch { 
+        addLog(`rie: session [${targetId}] not found or has no metadata.`, 'error'); 
+      }
       return;
     }
     if (cmd === 'rie export --spec') {
@@ -102,7 +111,7 @@ export function DocumentationStudio() {
       return;
     }
     if (cmd === 'clear') { setLogs([]); return; }
-    addLog(`Unknown command. Usage: rie export --spec, rie export --all, clear`, 'warn');
+    addLog(`Unknown command. Usage: rie compare <id>, rie export --spec, rie export --all, clear`, 'warn');
   };
   const getSynthesisInventory = () => {
     const content = docs[activeDoc] || '';
@@ -205,7 +214,7 @@ export function DocumentationStudio() {
               <div ref={terminalRef} className="flex-1 p-4 font-mono text-[10px] overflow-y-auto space-y-1">
                 {logs.map((log, i) => (
                   <div key={i} className={cn("flex gap-2", log.type === 'success' ? 'text-emerald-400' : log.type === 'warn' ? 'text-amber-400' : log.type === 'error' ? 'text-red-400' : log.type === 'cmd' ? 'text-sky-400' : 'text-zinc-400')}>
-                    <span className="opacity-30">{log.type === 'cmd' ? '➜' : '��'}</span>
+                    <span className="opacity-30">{log.type === 'cmd' ? '➜' : '📡'}</span>
                     <span>{log.msg}</span>
                   </div>
                 ))}
