@@ -3,10 +3,10 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import JSZip from 'jszip';
-import { 
-  FileText, ChevronLeft, Terminal as TerminalIcon, Eye, Zap, 
-  Code, ShieldCheck, DownloadCloud, Sparkles, CheckCircle2, 
-  Circle, LayoutPanelLeft, Save, Package, GitCompare 
+import {
+  ChevronLeft, Eye, Zap,
+  DownloadCloud, Sparkles, CheckCircle2,
+  Circle, Save, Package, Terminal as TerminalIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,7 +15,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { chatService } from '@/lib/chat';
 import { toast } from 'sonner';
-import { generateStandaloneReport } from '@/lib/report-generator';
 import { generateV2Spec } from '@/lib/specs-generator';
 import { cn } from '@/lib/utils';
 export function DocumentationStudio() {
@@ -31,10 +30,7 @@ export function DocumentationStudio() {
   const [metadata, setMetadata] = useState<any>(null);
   const terminalRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!sessionId) {
-      navigate('/');
-      return;
-    }
+    if (!sessionId) { navigate('/'); return; }
     fetchDocs();
     addLog('RIE-CORE_STIMULATOR_v2.0 READY. WAITING FOR COMMANDS.', 'success');
   }, [sessionId, navigate]);
@@ -57,6 +53,24 @@ export function DocumentationStudio() {
       setIsLoading(false);
     }
   };
+  const handleDownloadBundle = async () => {
+    if (Object.keys(docs).length === 0) {
+      toast.error('No documentation artifacts found.');
+      return;
+    }
+    const zip = new JSZip();
+    Object.entries(docs).forEach(([name, content]) => {
+      zip.file(name, content);
+    });
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `archlens-artifacts-${metadata?.name || 'repo'}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('ARTIFACT_BUNDLE_DOWNLOADED');
+  };
   const handleCommand = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!cliInput.trim()) return;
@@ -65,36 +79,30 @@ export function DocumentationStudio() {
     setCliInput('');
     if (cmd.startsWith('rie compare')) {
       const targetId = cmd.split(' ')[2];
-      if (!targetId) {
-        addLog('rie: usage - rie compare <session_id>', 'warn');
-        return;
-      }
+      if (!targetId) { addLog('rie: usage - rie compare <session_id>', 'warn'); return; }
       addLog(`rie: fetching target metadata [${targetId}]...`, 'info');
       try {
         const res = await fetch(`/api/sessions/${targetId}/metadata`);
         const targetData = await res.json();
         if (targetData.success && targetData.metadata) {
-          addLog(`rie: comparison delta calculated.`, 'success');
           addLog(`rie: delta score: ${metadata.validation.score - targetData.metadata.validation.score}%`, 'info');
         } else throw new Error();
-      } catch {
-        addLog('rie: failed to compare. session not found.', 'error');
-      }
+      } catch { addLog('rie: session not found.', 'error'); }
       return;
     }
     if (cmd === 'rie export --spec') {
-      addLog('rie: generating v2.0 architectural specification...', 'info');
-      if (metadata) {
-        generateV2Spec(metadata);
-        addLog('rie: specification generated and downloaded.', 'success');
-      }
+      addLog('rie: generating v2.0 spec...', 'info');
+      if (metadata) { generateV2Spec(metadata); addLog('rie: spec generated.', 'success'); }
       return;
     }
-    if (cmd === 'clear') {
-      setLogs([]);
+    if (cmd === 'rie export --all') {
+      addLog('rie: bundling all artifacts...', 'info');
+      await handleDownloadBundle();
+      addLog('rie: bundle download initiated.', 'success');
       return;
     }
-    addLog(`Unknown command. Usage: rie export --spec, rie compare <id>, clear`, 'warn');
+    if (cmd === 'clear') { setLogs([]); return; }
+    addLog(`Unknown command. Usage: rie export --spec, rie export --all, clear`, 'warn');
   };
   const getSynthesisInventory = () => {
     const content = docs[activeDoc] || '';
@@ -105,11 +113,6 @@ export function DocumentationStudio() {
       { name: 'Security', regex: /(#|##) (Security|Policy)/i },
     ];
     return sections.map(s => ({ ...s, populated: s.regex.test(content) }));
-  };
-  const getConfidence = () => {
-    if (!metadata?.validation?.sectionConfidence) return 100;
-    const sectionName = activeDoc.replace('.md', '');
-    return metadata.validation.sectionConfidence[sectionName] || 100;
   };
   if (isLoading) return <AppLayout container><Skeleton className="h-[600px] glass" /></AppLayout>;
   return (
@@ -122,12 +125,12 @@ export function DocumentationStudio() {
             </Button>
             <div>
               <h1 className="text-3xl font-bold tracking-tight uppercase">v2.0 Studio</h1>
-              <p className="text-muted-foreground font-mono text-[10px] uppercase tracking-widest opacity-60">Architectural_Suite_v2.0</p>
+              <p className="text-muted-foreground font-mono text-[10px] uppercase tracking-widest opacity-60">Artifact_Synthesis_Module</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => metadata && generateV2Spec(metadata)} className="btn-brutal-dark">
-              Export Spec (v2.0)
+            <Button variant="outline" onClick={handleDownloadBundle} className="btn-brutal-dark gap-2">
+              <Package className="w-4 h-4" /> Download Bundle
             </Button>
             <Button onClick={async () => {
               const res = await chatService.saveDocumentation(docs);
@@ -151,15 +154,15 @@ export function DocumentationStudio() {
               </div>
             </Card>
             <Card className="glass border-border p-4">
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-white/5 pb-2 mb-4">Grounding Score</h3>
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground border-b border-white/5 pb-2 mb-4">Integrity_Index</h3>
               <div className="flex items-end justify-between">
-                <span className="text-3xl font-stats">{getConfidence()}%</span>
-                <span className="text-[9px] font-bold uppercase text-primary/60">Confidence</span>
+                <span className="text-3xl font-stats">{metadata?.validation?.categories.grounding || 0}%</span>
+                <span className="text-[9px] font-bold uppercase text-primary/60">Truth_Conf</span>
               </div>
             </Card>
           </div>
           <div className="lg:col-span-9 flex flex-col gap-6">
-            <Card className="flex-1 min-h-[500px] flex flex-col glass border-border overflow-hidden">
+            <Card className="flex-1 min-h-[600px] flex flex-col glass border-border overflow-hidden">
                <div className="flex items-center justify-between px-6 py-3 border-b bg-white/5">
                 <span className="font-mono text-[10px] font-bold text-muted-foreground tracking-widest uppercase">{activeDoc}</span>
                 <div className="flex gap-2">
@@ -173,12 +176,12 @@ export function DocumentationStudio() {
               <ScrollArea className="flex-1">
                 <div className={cn("p-10 transition-opacity", isGenerating && "opacity-50")}>
                   {docs[activeDoc] ? (
-                    <article className="prose prose-slate dark:prose-invert max-w-none">
+                    <article className="prose prose-slate dark:prose-invert max-w-none prose-pre:bg-black/40">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{docs[activeDoc]}</ReactMarkdown>
                     </article>
                   ) : (
-                    <div className="flex flex-col items-center justify-center h-[300px] space-y-6">
-                      <Sparkles className="w-12 h-12 text-primary" />
+                    <div className="flex flex-col items-center justify-center h-[400px] space-y-6">
+                      <Sparkles className="w-12 h-12 text-primary animate-pulse" />
                       <Button onClick={async () => {
                         setIsGenerating(true);
                         const res = await fetch(`/api/chat/${sessionId}/generate-docs`, {
@@ -192,23 +195,23 @@ export function DocumentationStudio() {
                           addLog(`rie: ${activeDoc} synthesized.`, 'success');
                         }
                         setIsGenerating(false);
-                      }} disabled={isGenerating} className="btn-brutal-amber h-12">Synthesize {activeDoc}</Button>
+                      }} disabled={isGenerating} className="btn-brutal-amber h-12 px-10">Synthesize {activeDoc}</Button>
                     </div>
                   )}
                 </div>
               </ScrollArea>
             </Card>
-            <div className="bg-zinc-950 rounded-xl border border-white/10 h-60 overflow-hidden flex flex-col">
+            <div className="bg-zinc-950 rounded-xl border border-white/10 h-60 overflow-hidden flex flex-col shadow-inner">
               <div ref={terminalRef} className="flex-1 p-4 font-mono text-[10px] overflow-y-auto space-y-1">
                 {logs.map((log, i) => (
                   <div key={i} className={cn("flex gap-2", log.type === 'success' ? 'text-emerald-400' : log.type === 'warn' ? 'text-amber-400' : log.type === 'error' ? 'text-red-400' : log.type === 'cmd' ? 'text-sky-400' : 'text-zinc-400')}>
-                    <span className="opacity-30">{log.type === 'cmd' ? '➜' : '◈'}</span>
+                    <span className="opacity-30">{log.type === 'cmd' ? '➜' : '��'}</span>
                     <span>{log.msg}</span>
                   </div>
                 ))}
                 <form onSubmit={handleCommand} className="flex gap-2 mt-2">
-                  <span className="text-emerald-500">archlens@rie:~$</span>
-                  <input autoFocus value={cliInput} onChange={(e) => setCliInput(e.target.value)} className="bg-transparent border-none outline-none flex-1 text-zinc-300" />
+                  <span className="text-emerald-500">archlens@studio:~$</span>
+                  <input autoFocus value={cliInput} onChange={(e) => setCliInput(e.target.value)} className="bg-transparent border-none outline-none flex-1 text-zinc-300 font-mono text-[10px] uppercase" />
                 </form>
               </div>
             </div>

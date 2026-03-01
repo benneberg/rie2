@@ -6,21 +6,22 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Fingerprint, Brain, Target, ShieldCheck, Activity, Wrench, BarChart3, Info, Cpu, Globe, Terminal } from 'lucide-react';
+import { AlertTriangle, Fingerprint, Brain, Target, History, Loader2, Code2, Layers } from 'lucide-react';
 import { chatService } from '@/lib/chat';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { LanguageDistributionChart, RiskRadarChart } from '@/components/rie/DashboardCharts';
+import { RiskHeatmap, RiskRadarChart } from '@/components/rie/DashboardCharts';
 import { generateV2Spec } from '@/lib/specs-generator';
+import { DriftComparison } from '@/components/rie/DriftComparison';
 export function DashboardPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const sessionId = searchParams.get('session');
   const [metadata, setMetadata] = useState<RepositoryMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [fixingId, setFixingId] = useState<string | null>(null);
+  const [isFixing, setIsFixing] = useState<string | null>(null);
+  const [showDrift, setShowDrift] = useState(false);
   const fetchMetadata = useCallback(async () => {
     try {
       const response = await chatService.getMessages();
@@ -35,9 +36,27 @@ export function DashboardPage() {
     if (sessionId) { chatService.switchSession(sessionId); fetchMetadata(); }
     else navigate('/');
   }, [sessionId, navigate, fetchMetadata]);
+  const handleApplyFix = async (issueId: string) => {
+    setIsFixing(issueId);
+    const toastId = toast.loading('EXECUTING_REMEDIATION_STRATEGY...');
+    try {
+      const res = await fetch(`/api/chat/${sessionId}/apply-fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueId })
+      });
+      if (res.ok) {
+        toast.success('DEBT_REDUCED_SUCCESSFULLY', { id: toastId });
+        await fetchMetadata();
+      }
+    } catch {
+      toast.error('REMEDIATION_FAILED', { id: toastId });
+    } finally {
+      setIsFixing(null);
+    }
+  };
   if (isLoading) return <AppLayout container><Skeleton className="h-[600px] w-full glass" /></AppLayout>;
   if (!metadata) return <AppLayout container><div className="text-center py-20 opacity-20 uppercase">No session context</div></AppLayout>;
-  const groundingScore = metadata.validation?.categories.grounding || 0;
   return (
     <AppLayout container>
       <div className="space-y-12">
@@ -50,22 +69,36 @@ export function DashboardPage() {
             <h1 className="text-5xl md:text-7xl font-display font-black uppercase tracking-tighter leading-none">{metadata.name}</h1>
           </div>
           <div className="flex gap-4">
-            <Button variant="outline" onClick={() => generateV2Spec(metadata)} className="btn-brutal-dark">Export Spec v2.0</Button>
-            <Button onClick={() => navigate(`/studio?session=${sessionId}`)} className="btn-brutal-amber">Artifact Studio</Button>
+            <Button variant="outline" onClick={() => setShowDrift(!showDrift)} className={cn("btn-brutal-dark gap-2", showDrift && "bg-primary/10 border-primary/40")}>
+              <History className="w-4 h-4" /> Drift Analysis
+            </Button>
+            <Button variant="outline" onClick={() => generateV2Spec(metadata)} className="btn-brutal-dark">Export Spec</Button>
+            <Button onClick={() => navigate(`/studio?session=${sessionId}`)} className="btn-brutal-amber">Studio</Button>
           </div>
         </header>
+        <AnimatePresence>
+          {showDrift && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              <DriftComparison current={metadata} baseline={metadata.baseline} onClose={() => setShowDrift(false)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-           <Card className="glass border-l-4 border-l-emerald-500 lg:col-span-2">
+          <Card className="glass border-l-4 border-l-emerald-500 lg:col-span-2">
             <CardContent className="p-8 space-y-4">
               <div className="flex items-center gap-3">
                 <Brain className="w-5 h-5 text-emerald-500" />
                 <h3 className="text-[11px] font-black uppercase tracking-widest">Project Philosophy</h3>
               </div>
               <p className="text-sm font-medium leading-relaxed italic opacity-80">"{metadata.philosophy?.purpose}"</p>
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+              <div className="grid grid-cols-3 gap-4 pt-4 border-t border-white/5">
+                <div>
+                  <span className="text-[9px] font-bold uppercase opacity-30 block">Complexity</span>
+                  <span className="text-[10px] font-mono uppercase flex items-center gap-1"><Code2 className="w-3 h-3" /> {metadata.totalSymbols} symbols</span>
+                </div>
                 <div>
                   <span className="text-[9px] font-bold uppercase opacity-30 block">Positioning</span>
-                  <span className="text-[10px] font-mono uppercase">{metadata.philosophy?.positioning}</span>
+                  <span className="text-[10px] font-mono uppercase truncate">{metadata.philosophy?.positioning}</span>
                 </div>
                 <div>
                   <span className="text-[9px] font-bold uppercase opacity-30 block">Evolution</span>
@@ -80,7 +113,7 @@ export function DashboardPage() {
                 <Fingerprint className="w-4 h-4 text-amber-500" />
                 <h3 className="text-[10px] font-black uppercase tracking-widest">Grounding</h3>
               </div>
-              <div className="text-6xl font-stats text-amber-500">{groundingScore}%</div>
+              <div className="text-6xl font-stats text-amber-500">{metadata.validation?.categories.grounding || 0}%</div>
               <span className="text-[9px] font-mono uppercase opacity-40 mt-2">Claim Integrity</span>
             </CardContent>
           </Card>
@@ -97,10 +130,15 @@ export function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-8 space-y-8">
-             <div className="glass shadow-brutal-dark overflow-hidden min-h-[500px]">
-              <div className="p-6 border-b border-white/5 bg-white/5 font-display font-bold uppercase text-xs">Architectural Grounding Proof</div>
-              <div className="p-12 h-full flex items-center justify-center">
-                 <RiskRadarChart categories={metadata.validation?.categories || {}} />
+             <div className="glass shadow-brutal-dark overflow-hidden flex flex-col min-h-[500px]">
+              <div className="p-6 border-b border-white/5 bg-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2 font-display font-bold uppercase text-xs">
+                  <Layers className="w-4 h-4 text-primary" /> Risk Hotspot Mapping
+                </div>
+                <Badge variant="outline" className="text-[8px] font-mono">HEATMAP_v2.0</Badge>
+              </div>
+              <div className="flex-1 p-6 flex items-center justify-center overflow-hidden">
+                 <RiskHeatmap nodes={metadata.validation?.heatmap || []} />
               </div>
             </div>
           </div>
@@ -111,21 +149,31 @@ export function DashboardPage() {
                   <h3 className="font-display font-bold uppercase tracking-widest text-xs">Validation Issues</h3>
                   <Badge className="bg-red-500/20 text-red-400">{metadata.validation?.issues.length}</Badge>
                 </div>
-                <div className="flex-1 overflow-y-auto divide-y divide-white/5">
+                <div className="flex-1 overflow-y-auto divide-y divide-white/5 scrollbar-thin">
                   {metadata.validation?.issues.map((issue) => (
-                    <div key={issue.id} className="p-6 space-y-3">
+                    <div key={issue.id} className="p-6 space-y-3 group hover:bg-white/5 transition-colors">
                       <div className="flex items-start gap-3">
                         <AlertTriangle className={cn("w-4 h-4 mt-0.5", issue.severity === 'critical' ? 'text-red-500' : 'text-amber-500')} />
                         <div className="flex-1">
                           <p className="text-[11px] font-bold uppercase leading-tight">{issue.message}</p>
-                          <div className="mt-2 space-y-1">
-                            <p className="text-[10px] font-mono text-emerald-400 uppercase tracking-tighter">Fix: {issue.fix || issue.suggestion}</p>
-                            <p className="text-[10px] font-mono text-cyan-400 uppercase tracking-tighter">Impact: {issue.impact}</p>
+                          <div className="mt-3 space-y-2">
+                            <p className="text-[10px] font-mono text-white/50 leading-relaxed italic">{issue.suggestion}</p>
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleApplyFix(issue.id)}
+                              disabled={isFixing === issue.id}
+                              className="h-8 w-full text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-black"
+                            >
+                              {isFixing === issue.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Execute Fix_'}
+                            </Button>
                           </div>
                         </div>
                       </div>
                     </div>
                   ))}
+                  {!metadata.validation?.issues.length && (
+                    <div className="p-20 text-center opacity-20 font-mono text-xs uppercase tracking-widest">Zero issues found</div>
+                  )}
                 </div>
               </CardContent>
             </Card>

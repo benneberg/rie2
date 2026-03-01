@@ -5,6 +5,11 @@ export interface FileEntry {
   type: 'file' | 'directory';
   extension?: string;
   language?: string;
+  symbols?: {
+    classes: number;
+    functions: number;
+    exports: number;
+  };
 }
 export interface LanguageDetection {
   language: string;
@@ -141,6 +146,7 @@ export interface RepositoryMetadata {
   name: string;
   totalFiles: number;
   totalSize: number;
+  totalSymbols?: number;
   primaryLanguage: string;
   languages: LanguageDetection[];
   structure: FileEntry[];
