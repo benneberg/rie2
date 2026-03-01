@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { RepositoryMetadata, ValidationReport, ValidationCheck, ValidationIssue, HeatmapNode, RiskMetrics, PolicyConfig } from '../src/lib/rie-types';
+import { 
+  RepositoryMetadata, 
+  ValidationReport, 
+  ValidationCheck, 
+  ValidationIssue, 
+  HeatmapNode, 
+  GroundingClaim 
+} from '../src/lib/rie-types';
 const MetadataSchema = z.object({
   name: z.string(),
   totalFiles: z.number(),
@@ -17,27 +24,44 @@ export class RIEValidator {
     const checks: ValidationCheck[] = [];
     const issues: ValidationIssue[] = [];
     const heatmap: HeatmapNode[] = [];
+    const evidence: GroundingClaim[] = [];
     let rawScores = {
       consistency: 100,
       completeness: 100,
       security: 100,
-      structure: 100
+      structure: 100,
+      grounding: 100
     };
-    // 1. Documentation vs Code Consistency Audit
-    const docSummary = (metadata.documentation?.['summary'] || '').toLowerCase();
-    const detectedLangs = metadata.languages.map(l => l.language.toLowerCase());
-    const mismatchFound = detectedLangs.some(lang => lang !== 'other' && docSummary.length > 0 && !docSummary.includes(lang));
-    if (mismatchFound && docSummary.length > 0) {
-      rawScores.consistency -= 30;
-      issues.push({
-        id: 'DOC_CODE_MISMATCH',
-        severity: 'medium',
-        category: 'consistency',
-        message: 'Documentation summary does not align with detected project stack.',
-        suggestion: 'Re-generate documentation studio artifacts to sync with structural data.'
+    // 1. Documentation Grounding Audit
+    const sectionConfidence: Record<string, number> = {
+      'Overview': 100,
+      'Architecture': 100,
+      'Setup': 100
+    };
+    const docs = metadata.documentation || {};
+    const structurePaths = new Set(metadata.structure.map(f => f.path.toLowerCase()));
+    if (docs['README.md']) {
+      const readme = docs['README.md'].toLowerCase();
+      // Heuristic: check for mentioned files/technologies that don't exist
+      const techStack = metadata.languages.map(l => l.language.toLowerCase());
+      const suspiciousTerms = ['database', 'redis', 'docker', 'kubernetes', 'aws', 'stripe'];
+      suspiciousTerms.forEach(term => {
+        if (readme.includes(term) && !techStack.includes(term) && !Array.from(structurePaths).some(p => p.includes(term))) {
+          rawScores.grounding -= 10;
+          sectionConfidence['Overview'] -= 15;
+          issues.push({
+            id: `GROUNDING_HALLUCINATION_${term.toUpperCase()}`,
+            severity: 'medium',
+            category: 'grounding',
+            message: `Documentation mentions "${term}" but no evidence found in code.`,
+            suggestion: `Remove unverified technical claims from README or implement ${term} logic.`,
+            fix: `Sync README with deterministic scan results.`,
+            impact: `Prevents technical misinformation and improves stakeholder trust.`
+          });
+        }
       });
     }
-    // 2. Risk Metrics
+    // 2. Actionable Warnings for Existing Checks
     const fanInMap = new Map<string, number>();
     const fanOutMap = new Map<string, number>();
     metadata.dependencies.forEach(d => {
@@ -47,7 +71,6 @@ export class RIEValidator {
     const fanInMax = Math.max(0, ...Array.from(fanInMap.values()));
     const fanOutMax = Math.max(0, ...Array.from(fanOutMap.values()));
     const couplingIndex = (fanInMax + fanOutMax) / 2;
-    // 3. Structure & Layer Integrity
     if (couplingIndex > 15) {
       rawScores.structure -= 20;
       issues.push({
@@ -56,10 +79,12 @@ export class RIEValidator {
         category: 'structure',
         message: `High architectural coupling detected (Index: ${couplingIndex.toFixed(1)}).`,
         suggestion: 'Introduce interface abstractions to decouple component relationships.',
-        autoFixable: true
+        autoFixable: true,
+        fix: 'Implement Dependency Inversion at module boundaries.',
+        impact: 'Reduces blast radius of changes and improves unit testability.'
       });
     }
-    // 4. Security Audit
+    // Security Audit
     const sensitiveFiles = metadata.structure.filter(f =>
       ['.env', '.pem', '.key', 'id_rsa'].some(pattern => f.name.toLowerCase().includes(pattern))
     );
@@ -69,38 +94,43 @@ export class RIEValidator {
         id: 'SENSITIVE_FILES_DETECTED',
         severity: 'critical',
         category: 'security',
-        message: 'Security leak: Sensitive files (keys/env) found in archive.',
-        suggestion: 'Remove secrets from source control and rotate credentials immediately.',
-        autoFixable: true
+        message: 'Security leak: Sensitive files found in archive.',
+        suggestion: 'Remove secrets and rotate credentials immediately.',
+        autoFixable: true,
+        fix: 'Update .gitignore and purge sensitive files from history.',
+        impact: 'Prevents unauthorized access and potential data breaches.'
       });
     }
-    // 5. Monorepo Specific Checks
-    if (metadata.isMonorepo && (!metadata.workspaces || metadata.workspaces.length === 0)) {
-      rawScores.structure -= 15;
+    // Philosophy & Roadmap Checks
+    if (!metadata.philosophy || metadata.philosophy.purpose.length < 20) {
+      rawScores.completeness -= 15;
       issues.push({
-        id: 'INVALID_MONOREPO_CFG',
-        severity: 'medium',
-        category: 'structure',
-        message: 'Monorepo detected but no workspace boundaries identified.',
-        suggestion: 'Define "workspaces" field in root package.json for better mapping.'
+        id: 'SHALLOW_PHILOSOPHY',
+        severity: 'low',
+        category: 'completeness',
+        message: 'Project philosophy is missing or shallow.',
+        suggestion: 'Define a clear mission statement and architectural constraints in settings.',
+        fix: 'Populate the Domain Intelligence tab.',
+        impact: 'Aligns development team with core architectural values.'
       });
     }
-    // 6. Weighted Scoring Calculation (Moved up to fix hoisting)
+    // Final Weighted Score
     const finalScore = Math.round(
-      (rawScores.security * 0.35) +
-      (rawScores.structure * 0.25) +
-      (rawScores.consistency * 0.20) +
-      (rawScores.completeness * 0.20)
+      (rawScores.security * 0.30) +
+      (rawScores.structure * 0.20) +
+      (rawScores.consistency * 0.15) +
+      (rawScores.completeness * 0.15) +
+      (rawScores.grounding * 0.20)
     );
     const safeScore = Math.max(0, Math.min(100, finalScore));
-    // 7. Summary Badge Logic
+    // Summary Badge
     let summaryBadge = "NEUTRAL_SCAN";
     if (safeScore >= 90) summaryBadge = "ELITE_ARCH";
     else if (safeScore >= 80) summaryBadge = "HIGH_INTEGRITY";
     else if (safeScore >= 70) summaryBadge = "STABLE_BUILD";
     else if (safeScore >= 50) summaryBadge = "DEBT_WARNING";
     else summaryBadge = "CRITICAL_FAILURE";
-    // 8. Heatmap Generation
+    // Heatmap
     const dirs = new Map<string, { count: number; nesting: number; coupling: number }>();
     metadata.structure.forEach(f => {
       const parts = f.path.split('/');
@@ -136,7 +166,10 @@ export class RIEValidator {
         hasCircularDeps: couplingIndex > 30,
         hotspotPaths: Array.from(dirs.entries()).filter(e => e[1].coupling > 5).map(e => e[0])
       },
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      sectionConfidence: Object.fromEntries(
+        Object.entries(sectionConfidence).map(([k, v]) => [k, Math.max(0, v)])
+      )
     };
   }
 }

@@ -18,13 +18,38 @@ export interface DependencyEdge {
   target: string;
   type: 'import' | 'require' | 'static' | 'workspace';
 }
+export interface ProjectPhilosophy {
+  purpose: string;
+  positioning: string;
+  constraints: string[];
+  evolution: string;
+  interoperability: string;
+}
+export interface RoadmapItem {
+  version: string;
+  status: 'planned' | 'queued' | 'current';
+  features: string[];
+}
+export interface GroundingClaim {
+  id: string;
+  statement: string;
+  section: string;
+  evidence: {
+    file: string;
+    line?: number;
+    snippet?: string;
+  };
+  confidence: number;
+}
 export interface ValidationIssue {
   id: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   message: string;
-  category: 'consistency' | 'completeness' | 'security' | 'structure';
+  category: 'consistency' | 'completeness' | 'security' | 'structure' | 'grounding';
   suggestion?: string;
   autoFixable?: boolean;
+  fix?: string;
+  impact?: string;
 }
 export interface ValidationCheck {
   label: string;
@@ -52,6 +77,7 @@ export interface ValidationReport {
     completeness: number;
     security: number;
     structure: number;
+    grounding: number;
   };
   checks: ValidationCheck[];
   issues: ValidationIssue[];
@@ -60,6 +86,7 @@ export interface ValidationReport {
   riskMetrics?: RiskMetrics;
   summaryBadge?: string;
   updatedAt: number;
+  sectionConfidence?: Record<string, number>;
 }
 export interface DriftReport {
   previousScore: number;
@@ -77,8 +104,10 @@ export interface PolicyConfig {
   minStructureScore: number;
   minCompletenessScore: number;
   minConsistencyScore: number;
+  minGroundingScore: number;
   maxRiskIndex: number;
   failOnCritical: boolean;
+  strictGrounding: boolean;
 }
 export type ProjectDomainType = 'web' | 'firmware' | 'cli' | 'general' | 'auto';
 export interface RIEConfig {
@@ -98,22 +127,15 @@ export interface RIEConfig {
   projectType?: ProjectDomainType;
   includeGlossary?: boolean;
   includeRoadmap?: boolean;
+  customPhilosophy?: Partial<ProjectPhilosophy>;
+  customVocabulary?: Record<string, string>;
+  targetRoadmap?: RoadmapItem[];
 }
 export interface RepositorySource {
   type: 'upload' | 'github';
   url?: string;
   repo?: string;
   ref?: string;
-}
-export interface LLMContext {
-  projectName: string;
-  summary: string;
-  healthScore: number;
-  primaryLanguage: string;
-  structure: string[];
-  dependencies: DependencyEdge[];
-  excerpts: Record<string, string>;
-  driftSummary?: string;
 }
 export interface RepositoryMetadata {
   name: string;
@@ -134,4 +156,7 @@ export interface RepositoryMetadata {
   baseline?: RepositoryMetadata;
   drift?: DriftReport;
   projectType?: ProjectDomainType;
+  philosophy?: ProjectPhilosophy;
+  roadmap?: RoadmapItem[];
+  evidence?: GroundingClaim[];
 }
